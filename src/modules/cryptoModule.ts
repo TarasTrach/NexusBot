@@ -320,9 +320,13 @@ export async function exchangePaypalToUsdtSchemaLive(
   });
 
   const amountUAH = Math.floor((usdAmount * rate) / 10) * 10;
+  const amountUSD = usdAmount.toFixed(2);
+  const discountPercent = 5;
+  const discountedAmountUSD = (usdAmount * (1 - discountPercent / 100)).toFixed(2);
+  const discountValueUSD = (usdAmount * (discountPercent / 100)).toFixed(2);
 
   const heading = [
-    `Сума USD: ${usdAmount.toFixed(2)} $`,
+    `Сума USD: ${amountUSD} $  ->  ${discountedAmountUSD}(${discountValueUSD})USDT`,
     `Сума UAH: ${amountUAH} ₴`,
     `Курс PayPal: *${rate.toFixed(2)}* ₴`,
     `Банк: ${bank}`,
@@ -356,7 +360,8 @@ export async function exchangePaypalToUsdtSchemaLive(
     const top5 = [...suitable].sort((a, b) => a.price - b.price).slice(0, 5);
 
     const orderLines = top5.map((o) => {
-      const priceBold = `*${o.price.toFixed(2)}* ₴`;
+      const receivedUSDT = amountUAH / o.price - Number(discountedAmountUSD);
+      const priceBold = `*${o.price.toFixed(2)}* ₴      | ${receivedUSDT.toFixed(2)} USDT`;
       const indicator = o.price < rate ? " 🟢" : "";
       const range = `${o.minSingleTransAmount}–${o.maxSingleTransAmount} ₴`;
       const nick = o.nickname ?? "—";
