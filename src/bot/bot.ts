@@ -13,6 +13,7 @@ export function startBot(bot: TelegramAPI) {
     { command: "/convertmp3", description: "Convert YouTube video to MP3" },
     { command: "/obnal", description: "Calculate obnal exchange" },
     { command: "/randomizepass", description: "Randomize password" },
+    { command: "/paypal", description: "PayPal exchange" },
   ]);
 
   bot.on("message", async (msg: TelegramAPI.Message) => {
