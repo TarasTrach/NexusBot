@@ -322,7 +322,9 @@ export async function exchangePaypalToUsdtSchemaLive(
   const amountUAH = Math.floor((usdAmount * rate) / 10) * 10;
   const amountUSD = usdAmount.toFixed(2);
   const discountPercent = 5;
-  const discountedAmountUSD = (usdAmount * (1 - discountPercent / 100)).toFixed(2);
+  const discountedAmountUSD = (usdAmount * (1 - discountPercent / 100)).toFixed(
+    2
+  );
   const discountValueUSD = (usdAmount * (discountPercent / 100)).toFixed(2);
 
   const heading = [
@@ -361,7 +363,9 @@ export async function exchangePaypalToUsdtSchemaLive(
 
     const orderLines = top5.map((o) => {
       const receivedUSDT = amountUAH / o.price - Number(discountedAmountUSD);
-      const priceBold = `*${o.price.toFixed(2)}* ₴      | ${receivedUSDT.toFixed(2)} USDT`;
+      const priceBold = `*${o.price.toFixed(
+        2
+      )}* ₴      | ${receivedUSDT.toFixed(2)} USDT`;
       const indicator = o.price < rate ? " 🟢" : "";
       const range = `${o.minSingleTransAmount}–${o.maxSingleTransAmount} ₴`;
       const nick = o.nickname ?? "—";
@@ -409,7 +413,8 @@ export async function exchangePaypalToUsdtSchemaLive(
         .filter(
           (o) =>
             o.minSingleTransAmount <= amountUAH &&
-            o.maxSingleTransAmount >= amountUAH
+            o.maxSingleTransAmount >= amountUAH &&
+            o.raw?.orderNum > 5
         )
         .sort((a, b) => a.price - b.price)[0];
 
@@ -424,8 +429,7 @@ export async function exchangePaypalToUsdtSchemaLive(
         );
         lastAlertPrice = cheapest.price;
       }
-    } catch {
-    }
+    } catch {}
   };
 
   await doUpdate();

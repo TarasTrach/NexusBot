@@ -1,9 +1,9 @@
 import TelegramAPI from "node-telegram-bot-api";
-import convertYoutubeVideoToMp3 from "../modules/convertYoutubeVideoToMp3Module";
+import convertYoutubeVideoToMp3 from "../services/convertYoutubeVideoToMp3.service";
 import {
   exchangeObnalSchemaLive,
   exchangePaypalToUsdtSchemaLive,
-} from "../modules/cryptoModule";
+} from "../services/crypto.service";
 import { randomizePassword } from "../utils/randomizers";
 
 const adminChatID = 891948666;
@@ -67,9 +67,16 @@ export function startBot(bot: TelegramAPI) {
           });
           break;
         }
-          
+
         case "/paypal": {
-          if (chatID === adminChatID) await exchangePaypalToUsdtSchemaLive(chatID, bot);
+          if (chatID === adminChatID)
+            await exchangePaypalToUsdtSchemaLive(chatID, bot);
+          break;
+        }
+
+        case "/test": {
+          if (chatID === adminChatID) {
+          }
           break;
         }
 
