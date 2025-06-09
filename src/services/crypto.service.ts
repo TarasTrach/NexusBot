@@ -213,14 +213,13 @@ function escapeHTML(str: string): string {
 export async function exchangePaypalToUsdtLive(
   chatID: number,
   bot: TelegramAPI,
-  intervalSec = 20
+  intervalSec = 20,
 ) {
   const CONFIG_DIR = path.resolve(__dirname, "../config");
   const RATE_FILE = path.join(CONFIG_DIR, "rate.txt");
 
   const ensureRateFile = () => {
-    if (!fs.existsSync(CONFIG_DIR))
-      fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
     if (!fs.existsSync(RATE_FILE)) fs.writeFileSync(RATE_FILE, "0", "utf-8");
   };
 
@@ -236,7 +235,10 @@ export async function exchangePaypalToUsdtLive(
     fs.writeFileSync(RATE_FILE, rate.toString(), "utf-8");
   };
 
-  const askNumber = (prompt: string, error: string): Promise<number> =>
+  const askNumber = (
+    prompt: string,
+    error: string
+  ): Promise<number> =>
     new Promise((resolve) => {
       bot.sendMessage(chatID, prompt);
       const handler = (msg: any) => {
@@ -255,17 +257,12 @@ export async function exchangePaypalToUsdtLive(
 
   const askChoice = (
     prompt: string,
-    opts: { text: string; callback_data: string }[]
+    opts: { text: string; callback_data: string }[],
   ): Promise<string> =>
     new Promise((resolve) => {
-      bot.sendMessage(chatID, prompt, {
-        reply_markup: { inline_keyboard: [opts] },
-      });
+      bot.sendMessage(chatID, prompt, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [opts] } });
       const handler = async (cb: any) => {
-        if (
-          cb.from.id === chatID &&
-          opts.some((o) => o.callback_data === cb.data)
-        ) {
+        if (cb.from.id === chatID && opts.some((o) => o.callback_data === cb.data)) {
           await bot.answerCallbackQuery(cb.id);
           bot.removeListener("callback_query", handler);
           resolve(cb.data);
@@ -274,10 +271,7 @@ export async function exchangePaypalToUsdtLive(
       bot.on("callback_query", handler);
     });
 
-  const usdAmount = await askNumber(
-    "Введіть суму (USD):",
-    "Введіть коректне число:"
-  );
+  const usdAmount = await askNumber("Введіть суму (USD):", "Введіть коректне число:");
   const bank = await askChoice("Оберіть банк:", [
     { text: "ПриватБанк", callback_data: "PrivatBank" },
     { text: "Монобанк", callback_data: "Monobank" },
@@ -288,24 +282,18 @@ export async function exchangePaypalToUsdtLive(
   let rateChanged = false;
   if (rate > 0) {
     const choice = await askChoice(
-      `Курс PayPal: ${rate.toFixed(2)} ₴\nВикористати цей курс?`,
+      `Курс PayPal: *${rate.toFixed(2)}* ₴\nВикористати цей курс?`,
       [
         { text: "OK", callback_data: "RATE_OK" },
         { text: "Змінити", callback_data: "RATE_CHANGE" },
-      ]
+      ],
     );
     if (choice === "RATE_CHANGE") {
-      rate = await askNumber(
-        "Введіть курс PayPal (₴):",
-        "Введіть коректний курс:"
-      );
+      rate = await askNumber("Введіть курс PayPal (₴):", "Введіть коректний курс:");
       rateChanged = true;
     }
   } else {
-    rate = await askNumber(
-      "Введіть курс PayPal (₴):",
-      "Введіть коректний курс:"
-    );
+    rate = await askNumber("Введіть курс PayPal (₴):", "Введіть коректний курс:");
     rateChanged = true;
   }
   if (rateChanged) writeRate(rate);
@@ -313,9 +301,7 @@ export async function exchangePaypalToUsdtLive(
   const amountUAH = Math.floor((usdAmount * rate) / 10) * 10;
   const amountUSD = usdAmount.toFixed(2);
   const discountPercent = 5;
-  const discountedAmountUSD = (usdAmount * (1 - discountPercent / 100)).toFixed(
-    2
-  );
+  const discountedAmountUSD = (usdAmount * (1 - discountPercent / 100)).toFixed(2);
   const discountValueUSD = (usdAmount * (discountPercent / 100)).toFixed(2);
 
   const heading = [
@@ -325,12 +311,11 @@ export async function exchangePaypalToUsdtLive(
     `Банк: ${bank}`,
   ].join("\n");
 
-  const sent = await bot.sendMessage(chatID, `${heading}\n\nЗавантаження…`, {
-    parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: [[{ text: "❌ Stop", callback_data: "STOP_LIVE" }]],
-    },
-  });
+  const sent = await bot.sendMessage(
+    chatID,
+    `${heading}\n\nЗавантаження…`,
+    { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "❌ Stop", callback_data: "STOP_LIVE" }]] } }
+  );
   const messageId = sent.message_id;
 
   let lastText: string | null = null;
@@ -338,20 +323,9 @@ export async function exchangePaypalToUsdtLive(
 
   const update = async () => {
     try {
-      const orders = await searchAllP2P({
-        asset: "USDT",
-        fiat: "UAH",
-        tradeType: "BUY",
-        amount: amountUAH,
-        payTypes: [bank],
-        rows: 20,
-        page: 1,
-      });
+      const orders = await searchAllP2P({ asset: "USDT", fiat: "UAH", tradeType: "BUY", amount: amountUAH, payTypes: [bank], rows: 20, page: 1 });
       const suitable = orders.filter(
-        (o) =>
-          (o.minSingleTransAmount <= amountUAH &&
-            o.maxSingleTransAmount >= amountUAH) ||
-          o.raw?.orderNum > 5
+        (o) => (o.minSingleTransAmount <= amountUAH && o.maxSingleTransAmount >= amountUAH) || (o.raw?.orderNum > 5)
       );
 
       let newText: string;
@@ -360,15 +334,12 @@ export async function exchangePaypalToUsdtLive(
       } else {
         const top3 = suitable.sort((a, b) => a.price - b.price).slice(0, 3);
         const lines = top3.map((o) => {
-          const receivedUSDT =
-            amountUAH / o.price - Number(discountedAmountUSD);
-          const priceBold = `*${o.price.toFixed(2)}* ₴`;
+          const receivedUSDT = amountUAH / o.price - Number(discountedAmountUSD);
+          const priceBold = `*${o.price.toFixed(2)}*`;
           const indicator = o.price < rate ? " 🟢" : "";
           return [
             `🏷 ${o.exchange}`,
-            `💰 ${priceBold}      | ${receivedUSDT.toFixed(
-              2
-            )} USDT${indicator}`,
+            `💰 ${priceBold} ₴ | ${receivedUSDT.toFixed(2)} USDT${indicator}`,
             `🔢 ${o.minSingleTransAmount}–${o.maxSingleTransAmount} ₴`,
             `🤝 ${o.nickname ?? "—"}`,
           ].join("\n");
@@ -381,22 +352,18 @@ export async function exchangePaypalToUsdtLive(
           chat_id: chatID,
           message_id: messageId,
           parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "❌ Stop", callback_data: "STOP_LIVE" }],
+            ],
+          },
         });
         lastText = newText;
       }
 
-      const cheapest = suitable
-        .filter((o) => o.raw?.orderNum > 5)
-        .sort((a, b) => a.price - b.price)[0];
-      if (
-        cheapest &&
-        cheapest.price < rate &&
-        lastAlertPrice !== cheapest.price
-      ) {
-        await bot.sendMessage(
-          chatID,
-          `Знайдено ${cheapest.price.toFixed(2)} ₴ < ${rate.toFixed(2)} ₴`
-        );
+      const cheapest = suitable.filter((o) => o.raw?.orderNum > 5).sort((a, b) => a.price - b.price)[0];
+      if (cheapest && cheapest.price < rate && lastAlertPrice !== cheapest.price) {
+        await bot.sendMessage(chatID, `Знайдено ${cheapest.price.toFixed(2)} ₴ < ${rate.toFixed(2)} ₴`);
         lastAlertPrice = cheapest.price;
       }
     } catch (err) {
@@ -410,12 +377,10 @@ export async function exchangePaypalToUsdtLive(
   bot.once("callback_query", async (cb: any) => {
     if (cb.data === "STOP_LIVE" && cb.message?.message_id === messageId) {
       clearInterval(id);
-      await bot.editMessageReplyMarkup(
-        { inline_keyboard: [] },
-        { chat_id: chatID, message_id: messageId }
-      );
+      await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatID, message_id: messageId });
       await bot.answerCallbackQuery(cb.id, { text: "Live-оновлення зупинено" });
     }
   });
 }
+
 
