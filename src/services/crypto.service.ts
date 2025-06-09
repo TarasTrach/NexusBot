@@ -286,13 +286,7 @@ export async function exchangePaypalToUsdtLive(
 
   let rate = readRate();
   let rateChanged = false;
-  if (!rate) {
-    rate = await askNumber(
-      "Введіть курс PayPal (₴):",
-      "Введіть коректний курс:"
-    );
-    rateChanged = true;
-  } else {
+  if (rate > 0) {
     const choice = await askChoice(
       `Курс PayPal: ${rate.toFixed(2)} ₴\nВикористати цей курс?`,
       [
@@ -307,10 +301,14 @@ export async function exchangePaypalToUsdtLive(
       );
       rateChanged = true;
     }
+  } else {
+    rate = await askNumber(
+      "Введіть курс PayPal (₴):",
+      "Введіть коректний курс:"
+    );
+    rateChanged = true;
   }
-  if (rateChanged) {
-    writeRate(rate);
-  }
+  if (rateChanged) writeRate(rate);
 
   const amountUAH = Math.floor((usdAmount * rate) / 10) * 10;
   const amountUSD = usdAmount.toFixed(2);
@@ -339,7 +337,6 @@ export async function exchangePaypalToUsdtLive(
   let lastAlertPrice: number | null = null;
 
   const update = async () => {
-    const start = Date.now();
     try {
       const orders = await searchAllP2P({
         asset: "USDT",
@@ -350,7 +347,6 @@ export async function exchangePaypalToUsdtLive(
         rows: 20,
         page: 1,
       });
-
       const suitable = orders.filter(
         (o) =>
           (o.minSingleTransAmount <= amountUAH &&
@@ -362,8 +358,8 @@ export async function exchangePaypalToUsdtLive(
       if (!suitable.length) {
         newText = `${heading}\n\nПідходящі ордери не знайдено 😔`;
       } else {
-        const top5 = suitable.sort((a, b) => a.price - b.price).slice(0, 5);
-        const lines = top5.map((o) => {
+        const top3 = suitable.sort((a, b) => a.price - b.price).slice(0, 3);
+        const lines = top3.map((o) => {
           const receivedUSDT =
             amountUAH / o.price - Number(discountedAmountUSD);
           const priceBold = `*${o.price.toFixed(2)}* ₴`;
