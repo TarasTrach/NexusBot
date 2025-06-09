@@ -2,7 +2,7 @@ import TelegramAPI from "node-telegram-bot-api";
 import convertYoutubeVideoToMp3 from "../services/convertYoutubeVideoToMp3.service";
 import {
   exchangeObnalSchemaLive,
-  exchangePaypalToUsdtSchemaLive,
+  exchangePaypalToUsdtLive,
 } from "../services/crypto.service";
 import { randomizePassword } from "../utils/randomizers";
 
@@ -70,7 +70,7 @@ export function startBot(bot: TelegramAPI) {
 
         case "/paypal": {
           if (chatID === adminChatID)
-            await exchangePaypalToUsdtSchemaLive(chatID, bot);
+            await exchangePaypalToUsdtLive(chatID, bot);
           break;
         }
 

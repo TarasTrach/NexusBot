@@ -5,6 +5,8 @@ import {
   okxP2P,
   binanceP2P,
 } from "../utils/crypto/p2pFetchers";
+import fs from 'fs';
+import path from 'path';
 
 export async function exchangeObnalSchema(chatID: number, bot: TelegramAPI) {
   const query = {
@@ -208,116 +210,107 @@ function escapeHTML(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export async function exchangePaypalToUsdtSchemaLive(
+export async function exchangePaypalToUsdtLive(
   chatID: number,
   bot: TelegramAPI,
-  updateIntervalSec = 30
+  intervalSec = 20
 ) {
-  const promptNumber = (
-    promptText: string,
-    errorText: string
-  ): Promise<number> => {
-    return new Promise((resolve) => {
-      bot.sendMessage(chatID, promptText);
-      const onMessage = (msg: any) => {
+  const CONFIG_DIR = path.resolve(__dirname, "../config");
+  const RATE_FILE = path.join(CONFIG_DIR, "rate.txt");
+
+  const ensureRateFile = () => {
+    if (!fs.existsSync(CONFIG_DIR))
+      fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    if (!fs.existsSync(RATE_FILE)) fs.writeFileSync(RATE_FILE, "0", "utf-8");
+  };
+
+  const readRate = (): number => {
+    ensureRateFile();
+    const raw = fs.readFileSync(RATE_FILE, "utf-8").trim();
+    const r = parseFloat(raw.replace(",", "."));
+    return isNaN(r) || r <= 0 ? 0 : r;
+  };
+
+  const writeRate = (rate: number): void => {
+    ensureRateFile();
+    fs.writeFileSync(RATE_FILE, rate.toString(), "utf-8");
+  };
+
+  const askNumber = (prompt: string, error: string): Promise<number> =>
+    new Promise((resolve) => {
+      bot.sendMessage(chatID, prompt);
+      const handler = (msg: any) => {
         if (msg.chat.id === chatID && msg.text) {
-          const value = parseFloat(msg.text.replace(",", ".").trim());
-          if (!isNaN(value) && value > 0) {
-            bot.removeListener("message", onMessage);
-            resolve(value);
+          const v = parseFloat(msg.text.replace(",", ".").trim());
+          if (!isNaN(v) && v > 0) {
+            bot.removeListener("message", handler);
+            resolve(v);
           } else {
-            bot.sendMessage(chatID, errorText);
+            bot.sendMessage(chatID, error);
           }
         }
       };
-      bot.on("message", onMessage);
+      bot.on("message", handler);
     });
-  };
 
-  const promptChoice = (
-    promptText: string,
-    options: { text: string; callback_data: string }[]
-  ): Promise<string> => {
-    return new Promise((resolve) => {
-      bot.sendMessage(chatID, promptText, {
-        reply_markup: {
-          inline_keyboard: [options],
-        },
+  const askChoice = (
+    prompt: string,
+    opts: { text: string; callback_data: string }[]
+  ): Promise<string> =>
+    new Promise((resolve) => {
+      bot.sendMessage(chatID, prompt, {
+        reply_markup: { inline_keyboard: [opts] },
       });
-      const onCallback = async (cb: any) => {
+      const handler = async (cb: any) => {
         if (
           cb.from.id === chatID &&
-          options.map((o) => o.callback_data).includes(cb.data)
+          opts.some((o) => o.callback_data === cb.data)
         ) {
           await bot.answerCallbackQuery(cb.id);
-          bot.removeListener("callback_query", onCallback);
+          bot.removeListener("callback_query", handler);
           resolve(cb.data);
         }
       };
-      bot.on("callback_query", onCallback);
+      bot.on("callback_query", handler);
     });
-  };
 
-  const usdAmount = await promptNumber(
+  const usdAmount = await askNumber(
     "Введіть суму (USD):",
     "Введіть коректне число:"
   );
-
-  const bank = await promptChoice("Оберіть банк:", [
+  const bank = await askChoice("Оберіть банк:", [
     { text: "ПриватБанк", callback_data: "PrivatBank" },
     { text: "Монобанк", callback_data: "Monobank" },
     { text: "А-Банк", callback_data: "ABank" },
   ]);
 
-  let rate = 0;
-  rate = await new Promise((resolve) => {
-    const promptRateConfirmation = () => {
-      const text = `Курс PayPal: *${rate.toFixed(2)}* ₴\nВикористати цей курс?`;
-      bot.sendMessage(chatID, text, {
-        parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "OK", callback_data: "RATE_OK" },
-              { text: "Змінити", callback_data: "RATE_CHANGE" },
-            ],
-          ],
-        },
-      });
-    };
-
-    promptRateConfirmation();
-
-    const onCallbackRate = async (cb: any) => {
-      if (
-        cb.from.id === chatID &&
-        ["RATE_OK", "RATE_CHANGE"].includes(cb.data)
-      ) {
-        await bot.answerCallbackQuery(cb.id);
-        bot.removeListener("callback_query", onCallbackRate);
-
-        if (cb.data === "RATE_OK") {
-          resolve(rate);
-        } else {
-          const onMessageRate = (msg: any) => {
-            if (msg.chat.id === chatID && msg.text) {
-              const value = parseFloat(msg.text.replace(",", ".").trim());
-              if (!isNaN(value) && value > 0) {
-                bot.removeListener("message", onMessageRate);
-                resolve(value);
-              } else {
-                bot.sendMessage(chatID, "Введіть коректний курс:");
-              }
-            }
-          };
-          bot.sendMessage(chatID, "Введіть курс:");
-          bot.on("message", onMessageRate);
-        }
-      }
-    };
-
-    bot.on("callback_query", onCallbackRate);
-  });
+  let rate = readRate();
+  let rateChanged = false;
+  if (!rate) {
+    rate = await askNumber(
+      "Введіть курс PayPal (₴):",
+      "Введіть коректний курс:"
+    );
+    rateChanged = true;
+  } else {
+    const choice = await askChoice(
+      `Курс PayPal: ${rate.toFixed(2)} ₴\nВикористати цей курс?`,
+      [
+        { text: "OK", callback_data: "RATE_OK" },
+        { text: "Змінити", callback_data: "RATE_CHANGE" },
+      ]
+    );
+    if (choice === "RATE_CHANGE") {
+      rate = await askNumber(
+        "Введіть курс PayPal (₴):",
+        "Введіть коректний курс:"
+      );
+      rateChanged = true;
+    }
+  }
+  if (rateChanged) {
+    writeRate(rate);
+  }
 
   const amountUAH = Math.floor((usdAmount * rate) / 10) * 10;
   const amountUSD = usdAmount.toFixed(2);
@@ -334,54 +327,19 @@ export async function exchangePaypalToUsdtSchemaLive(
     `Банк: ${bank}`,
   ].join("\n");
 
-  const sentMessage = await bot.sendMessage(
-    chatID,
-    `${heading}\n\nЗавантаження…`,
-    {
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [[{ text: "❌ Stop", callback_data: "STOP_LIVE" }]],
-      },
-    }
-  );
-  const messageId = sentMessage.message_id;
+  const sent = await bot.sendMessage(chatID, `${heading}\n\nЗавантаження…`, {
+    parse_mode: "Markdown",
+    reply_markup: {
+      inline_keyboard: [[{ text: "❌ Stop", callback_data: "STOP_LIVE" }]],
+    },
+  });
+  const messageId = sent.message_id;
 
   let lastText: string | null = null;
   let lastAlertPrice: number | null = null;
 
-  const formatTop5 = (orders: P2POrderWithExchange[]): string => {
-    const suitable = orders.filter(
-      (o) =>
-        o.minSingleTransAmount <= amountUAH &&
-        o.maxSingleTransAmount >= amountUAH
-    );
-    if (!suitable.length) {
-      return `${heading}\n\nПідходящі ордери не знайдено 😔`;
-    }
-
-    const top5 = [...suitable].sort((a, b) => a.price - b.price).slice(0, 5);
-
-    const orderLines = top5.map((o) => {
-      const receivedUSDT = amountUAH / o.price - Number(discountedAmountUSD);
-      const priceBold = `*${o.price.toFixed(
-        2
-      )}* ₴      | ${receivedUSDT.toFixed(2)} USDT`;
-      const indicator = o.price < rate ? " 🟢" : "";
-      const range = `${o.minSingleTransAmount}–${o.maxSingleTransAmount} ₴`;
-      const nick = o.nickname ?? "—";
-
-      return [
-        `🏷 ${o.exchange}`,
-        `💰 ${priceBold}${indicator}`,
-        `🔢 ${range}`,
-        `🤝 ${nick}`,
-      ].join("\n");
-    });
-
-    return [heading, ...orderLines].join("\n\n");
-  };
-
-  const doUpdate = async () => {
+  const update = async () => {
+    const start = Date.now();
     try {
       const orders = await searchAllP2P({
         asset: "USDT",
@@ -393,31 +351,47 @@ export async function exchangePaypalToUsdtSchemaLive(
         page: 1,
       });
 
-      const newText = formatTop5(orders);
+      const suitable = orders.filter(
+        (o) =>
+          (o.minSingleTransAmount <= amountUAH &&
+            o.maxSingleTransAmount >= amountUAH) ||
+          o.raw?.orderNum > 5
+      );
+
+      let newText: string;
+      if (!suitable.length) {
+        newText = `${heading}\n\nПідходящі ордери не знайдено 😔`;
+      } else {
+        const top5 = suitable.sort((a, b) => a.price - b.price).slice(0, 5);
+        const lines = top5.map((o) => {
+          const receivedUSDT =
+            amountUAH / o.price - Number(discountedAmountUSD);
+          const priceBold = `*${o.price.toFixed(2)}* ₴`;
+          const indicator = o.price < rate ? " 🟢" : "";
+          return [
+            `🏷 ${o.exchange}`,
+            `💰 ${priceBold}      | ${receivedUSDT.toFixed(
+              2
+            )} USDT${indicator}`,
+            `🔢 ${o.minSingleTransAmount}–${o.maxSingleTransAmount} ₴`,
+            `🤝 ${o.nickname ?? "—"}`,
+          ].join("\n");
+        });
+        newText = [heading, ...lines].join("\n\n");
+      }
 
       if (newText !== lastText) {
-        lastText = newText;
         await bot.editMessageText(newText, {
           chat_id: chatID,
           message_id: messageId,
           parse_mode: "Markdown",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "❌ Stop", callback_data: "STOP_LIVE" }],
-            ],
-          },
         });
+        lastText = newText;
       }
 
-      const cheapest = orders
-        .filter(
-          (o) =>
-            o.minSingleTransAmount <= amountUAH &&
-            o.maxSingleTransAmount >= amountUAH &&
-            o.raw?.orderNum > 5
-        )
+      const cheapest = suitable
+        .filter((o) => o.raw?.orderNum > 5)
         .sort((a, b) => a.price - b.price)[0];
-
       if (
         cheapest &&
         cheapest.price < rate &&
@@ -429,24 +403,23 @@ export async function exchangePaypalToUsdtSchemaLive(
         );
         lastAlertPrice = cheapest.price;
       }
-    } catch {}
+    } catch (err) {
+      await bot.sendMessage(chatID, `[ERROR] ${err}`);
+    }
   };
 
-  await doUpdate();
-  const intervalId = setInterval(doUpdate, updateIntervalSec * 1000);
+  await update();
+  const id = setInterval(update, intervalSec * 1000);
 
   bot.once("callback_query", async (cb: any) => {
     if (cb.data === "STOP_LIVE" && cb.message?.message_id === messageId) {
-      clearInterval(intervalId);
-
+      clearInterval(id);
       await bot.editMessageReplyMarkup(
         { inline_keyboard: [] },
         { chat_id: chatID, message_id: messageId }
       );
-
-      await bot.answerCallbackQuery(cb.id, {
-        text: "Live-оновлення зупинено",
-      });
+      await bot.answerCallbackQuery(cb.id, { text: "Live-оновлення зупинено" });
     }
   });
 }
+
