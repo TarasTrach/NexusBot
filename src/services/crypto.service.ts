@@ -367,7 +367,6 @@ export async function exchangePaypalToUsdtLive(
         lastAlertPrice = cheapest.price;
       }
     } catch (err) {
-      await bot.sendMessage(chatID, `[ERROR] ${err}`);
     }
   };
 
