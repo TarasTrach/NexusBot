@@ -352,7 +352,7 @@ export async function exchangePaypalToUsdtLive(
         (o) =>
           (o.minSingleTransAmount <= amountUAH &&
             o.maxSingleTransAmount >= amountUAH) ||
-          o.raw?.recentOrderNum > 3
+          (o.recentOrderNum ?? 0) > 3
       );
 
       let newText: string;

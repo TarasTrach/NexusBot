@@ -16,6 +16,7 @@ export interface P2POrder {
   quantity: number;
   minSingleTransAmount: number;
   maxSingleTransAmount: number;
+  recentOrderNum?: number;
   nickname?: string;
   payTypes?: string[];
   raw?: any;
