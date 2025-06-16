@@ -2,9 +2,13 @@ import fs from "fs";
 import * as path from "path";
 import ytdl from "@distube/ytdl-core";
 import ffmpeg from "fluent-ffmpeg";
+import ffmpegStatic from "ffmpeg-static";
 import axios from "axios";
 import sharp from "sharp";
 import { unlinkAsync } from "./fileUtils";
+import { pipeline } from "stream/promises";
+
+ffmpeg.setFfmpegPath(ffmpegStatic as string);
 
 export async function downloadYouTubeAudio(videoUrl: any, outputPath: any) {
   try {
@@ -25,7 +29,7 @@ export async function downloadYouTubeAudio(videoUrl: any, outputPath: any) {
     const dir = path.dirname(outputPath);
     await fs.promises.mkdir(dir, { recursive: true });
 
-    let lastError = null;
+    let lastError: any = null;
     for (const candidate of candidates) {
       try {
         await attemptDownload(videoUrl, candidate, outputPath);
@@ -37,32 +41,25 @@ export async function downloadYouTubeAudio(videoUrl: any, outputPath: any) {
         lastError = error;
         try {
           await fs.promises.unlink(outputPath);
-        } catch (e) {}
+        } catch {}
       }
     }
 
     throw lastError;
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Помилка під час завантаження: ${error}`);
     throw error;
   }
 }
 
-function attemptDownload(videoUrl: any, candidate: any, outputPath: any) {
-  return new Promise<void>((resolve, reject) => {
-    const videoStream = ytdl(videoUrl, { format: candidate });
-    videoStream.on("error", (error) => {
-      reject(error);
-    });
-    const fileStream = fs.createWriteStream(outputPath);
-    fileStream.on("error", (error) => {
-      reject(error);
-    });
-    fileStream.on("finish", () => {
-      resolve();
-    });
-    videoStream.pipe(fileStream);
-  });
+async function attemptDownload(
+  videoUrl: any,
+  candidate: any,
+  outputPath: any
+): Promise<void> {
+  const videoStream = ytdl(videoUrl, { format: candidate });
+  const fileStream = fs.createWriteStream(outputPath, { autoClose: true });
+  await pipeline(videoStream, fileStream);
 }
 
 export async function convertToMp3(
