@@ -213,14 +213,15 @@ function escapeHTML(str: string): string {
 export async function exchangePaypalToUsdtLive(
   chatID: number,
   bot: TelegramAPI,
-  intervalSec = 20
+  intervalSec = 10
 ) {
   const CONFIG_DIR = path.resolve(__dirname, "../config");
   const RATE_FILE = path.join(CONFIG_DIR, "rate.txt");
 
+  /* ──────────────── helpers ──────────────── */
+
   const ensureRateFile = () => {
-    if (!fs.existsSync(CONFIG_DIR))
-      fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
     if (!fs.existsSync(RATE_FILE)) fs.writeFileSync(RATE_FILE, "0", "utf-8");
   };
 
@@ -258,15 +259,9 @@ export async function exchangePaypalToUsdtLive(
     opts: { text: string; callback_data: string }[]
   ): Promise<string> =>
     new Promise((resolve) => {
-      bot.sendMessage(chatID, prompt, {
-        parse_mode: "Markdown",
-        reply_markup: { inline_keyboard: [opts] },
-      });
+      bot.sendMessage(chatID, prompt, { reply_markup: { inline_keyboard: [opts] } });
       const handler = async (cb: any) => {
-        if (
-          cb.from.id === chatID &&
-          opts.some((o) => o.callback_data === cb.data)
-        ) {
+        if (cb.from.id === chatID && opts.some((o) => o.callback_data === cb.data)) {
           await bot.answerCallbackQuery(cb.id);
           bot.removeListener("callback_query", handler);
           resolve(cb.data);
@@ -275,67 +270,66 @@ export async function exchangePaypalToUsdtLive(
       bot.on("callback_query", handler);
     });
 
-  const usdAmount = await askNumber(
-    "Введіть суму (USD):",
-    "Введіть коректне число:"
-  );
+  /* ──────────────── input ──────────────── */
+
+  const usdAmount = await askNumber("Введіть суму (USD):", "Введіть коректне число:");
   const bank = await askChoice("Оберіть банк:", [
     { text: "ПриватБанк", callback_data: "PrivatBank" },
     { text: "Монобанк", callback_data: "Monobank" },
     { text: "А-Банк", callback_data: "ABank" },
   ]);
 
+  /* ──────────────── rate ──────────────── */
+
   let rate = readRate();
   let rateChanged = false;
+
   if (rate > 0) {
     const choice = await askChoice(
-      `Курс PayPal: *${rate.toFixed(2)}* ₴\nВикористати цей курс?`,
+      `Курс PayPal: ${rate.toFixed(2)} ₴\nВикористати цей курс?`,
       [
         { text: "OK", callback_data: "RATE_OK" },
         { text: "Змінити", callback_data: "RATE_CHANGE" },
       ]
     );
+
     if (choice === "RATE_CHANGE") {
-      rate = await askNumber(
-        "Введіть курс PayPal (₴):",
-        "Введіть коректний курс:"
-      );
+      rate = await askNumber("Введіть курс PayPal (₴):", "Введіть коректний курс:");
       rateChanged = true;
     }
   } else {
-    rate = await askNumber(
-      "Введіть курс PayPal (₴):",
-      "Введіть коректний курс:"
-    );
+    rate = await askNumber("Введіть курс PayPal (₴):", "Введіть коректний курс:");
     rateChanged = true;
   }
+
   if (rateChanged) writeRate(rate);
+
+  /* ──────────────── calculations ──────────────── */
 
   const amountUAH = Math.floor((usdAmount * rate) / 10) * 10;
   const amountUSD = usdAmount.toFixed(2);
-  const discountPercent = 5;
-  const discountedAmountUSD = (usdAmount * (1 - discountPercent / 100)).toFixed(
-    2
-  );
+  const discountPercent = 4;
+  const discountedAmountUSD = (usdAmount * (1 - discountPercent / 100)).toFixed(2);
   const discountValueUSD = (usdAmount * (discountPercent / 100)).toFixed(2);
 
   const heading = [
-    `Сума USD: ${amountUSD} $  ->  ${discountedAmountUSD}(${discountValueUSD})USDT`,
+    `Сума USD: ${amountUSD} $ -> ${discountedAmountUSD} (${discountValueUSD}) USDT(${discountPercent}%)`,
     `Сума UAH: ${amountUAH} ₴`,
-    `Курс PayPal: *${rate.toFixed(2)}* ₴`,
+    `Курс PayPal: ${rate.toFixed(2)} ₴`,
     `Банк: ${bank}`,
   ].join("\n");
 
+  /* ──────────────── live message ──────────────── */
+
   const sent = await bot.sendMessage(chatID, `${heading}\n\nЗавантаження…`, {
-    parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: [[{ text: "❌ Stop", callback_data: "STOP_LIVE" }]],
-    },
+    reply_markup: { inline_keyboard: [[{ text: "❌ Stop", callback_data: "STOP_LIVE" }]] },
   });
   const messageId = sent.message_id;
 
   let lastText: string | null = null;
   let lastAlertPrice: number | null = null;
+
+  /* ──────────────── updater ──────────────── */
 
   const update = async () => {
     try {
@@ -348,30 +342,37 @@ export async function exchangePaypalToUsdtLive(
         rows: 20,
         page: 1,
       });
+
       const suitable = orders.filter(
         (o) =>
-          (o.minSingleTransAmount <= amountUAH &&
-            o.maxSingleTransAmount >= amountUAH) ||
+          (o.minSingleTransAmount <= amountUAH && o.maxSingleTransAmount >= amountUAH) ||
           (o.recentOrderNum ?? 0) > 3
       );
 
       let newText: string;
+
       if (!suitable.length) {
         newText = `${heading}\n\nПідходящі ордери не знайдено 😔`;
       } else {
         const top3 = suitable.sort((a, b) => a.price - b.price).slice(0, 3);
+
         const lines = top3.map((o) => {
-          const receivedUSDT =
-            amountUAH / o.price - Number(discountedAmountUSD);
-          const priceBold = `*${o.price.toFixed(2)}*`;
+          const receivedUSDT = amountUAH / o.price - Number(discountedAmountUSD);
+          const amountToPayAdditionally = Number(discountValueUSD) - receivedUSDT;
+          const fullFee = Number(discountValueUSD) + amountToPayAdditionally;
+          const amountToReceive = Number(amountUSD) - fullFee;
+          const fullFeeInPercent = (fullFee / Number(amountUSD)) * 100;
+          const priceText = o.price.toFixed(2);
           const indicator = o.price < rate ? " 🟢" : "";
+
           return [
             `🏷 ${o.exchange}`,
-            `💰 ${priceBold} ₴ | ${receivedUSDT.toFixed(2)} USDT${indicator}`,
+            `💰 ${priceText} ₴ | ${amountToReceive.toFixed(2)} USDT${indicator}   ${fullFeeInPercent.toFixed(1)}%`,
             `🔢 ${o.minSingleTransAmount}–${o.maxSingleTransAmount} ₴`,
             `🤝 ${o.nickname ?? "—"}`,
           ].join("\n");
         });
+
         newText = [heading, ...lines].join("\n\n");
       }
 
@@ -379,12 +380,7 @@ export async function exchangePaypalToUsdtLive(
         await bot.editMessageText(newText, {
           chat_id: chatID,
           message_id: messageId,
-          parse_mode: "Markdown",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "❌ Stop", callback_data: "STOP_LIVE" }],
-            ],
-          },
+          reply_markup: { inline_keyboard: [[{ text: "❌ Stop", callback_data: "STOP_LIVE" }]] },
         });
         lastText = newText;
       }
@@ -392,30 +388,25 @@ export async function exchangePaypalToUsdtLive(
       const cheapest = suitable
         .filter((o) => o.raw?.orderNum > 5)
         .sort((a, b) => a.price - b.price)[0];
-      if (
-        cheapest &&
-        cheapest.price < rate &&
-        lastAlertPrice !== cheapest.price
-      ) {
-        await bot.sendMessage(
-          chatID,
-          `Знайдено ${cheapest.price.toFixed(2)} ₴ < ${rate.toFixed(2)} ₴`
-        );
+
+      if (cheapest && cheapest.price < rate && lastAlertPrice !== cheapest.price) {
+        await bot.sendMessage(chatID, `Знайдено ${cheapest.price.toFixed(2)} ₴ < ${rate.toFixed(2)} ₴`);
         lastAlertPrice = cheapest.price;
       }
-    } catch (err) {}
+    } catch {
+      /* ignore errors, continue updating */
+    }
   };
 
   await update();
   const id = setInterval(update, intervalSec * 1000);
 
+  /* ──────────────── stop handler ──────────────── */
+
   bot.once("callback_query", async (cb: any) => {
     if (cb.data === "STOP_LIVE" && cb.message?.message_id === messageId) {
       clearInterval(id);
-      await bot.editMessageReplyMarkup(
-        { inline_keyboard: [] },
-        { chat_id: chatID, message_id: messageId }
-      );
+      await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatID, message_id: messageId });
       await bot.answerCallbackQuery(cb.id, { text: "Live-оновлення зупинено" });
     }
   });
