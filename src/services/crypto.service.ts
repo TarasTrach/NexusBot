@@ -411,3 +411,147 @@ export async function exchangePaypalToUsdtLive(
     }
   });
 }
+
+export async function getSecondTopFullFeePercentOnce(): Promise<number | null> {
+  const usdAmount = 300;
+  const discountPercent = 4;
+
+  const CONFIG_DIR = path.resolve(__dirname, "../config");
+  const RATE_FILE = path.join(CONFIG_DIR, "rate.txt");
+
+  const ensureRateFile = () => {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    if (!fs.existsSync(RATE_FILE)) fs.writeFileSync(RATE_FILE, "0", "utf-8");
+  };
+
+  const readRate = (): number => {
+    ensureRateFile();
+    const raw = fs.readFileSync(RATE_FILE, "utf-8").trim();
+    const r = parseFloat(raw.replace(",", "."));
+    return isNaN(r) || r <= 0 ? 0 : r;
+  };
+
+  const rate = readRate();
+  if (rate <= 0) return null;
+
+  const amountUAH = Math.floor((usdAmount * rate) / 10) * 10;
+  const amountUSD = usdAmount;
+  const discountedAmountUSD = usdAmount * (1 - discountPercent / 100);
+  const discountValueUSD = usdAmount * (discountPercent / 100);
+
+  const orders = await searchAllP2P({
+    asset: "USDT",
+    fiat: "UAH",
+    tradeType: "BUY",
+    amount: amountUAH,
+    payTypes: ["Monobank"],
+    rows: 20,
+    page: 1,
+  });
+
+  const suitable = orders.filter(
+    (o: any) =>
+      (o.minSingleTransAmount <= amountUAH && o.maxSingleTransAmount >= amountUAH) ||
+      ((o.recentOrderNum ?? 0) > 3)
+  );
+  if (suitable.length < 2) return null;
+
+  const top3 = [...suitable].sort((a: any, b: any) => a.price - b.price).slice(0, 3);
+  if (top3.length < 2) return null;
+
+  const o = top3[1];
+  const receivedUSDT = amountUAH / o.price - discountedAmountUSD;
+  const amountToPayAdditionally = discountValueUSD - receivedUSDT;
+  const fullFee = discountValueUSD + amountToPayAdditionally;
+  const fullFeeInPercent = (fullFee / amountUSD) * 100;
+
+  return Number(fullFeeInPercent.toFixed(1));
+}
+
+export async function updatePaypalRate(
+  bot: TelegramAPI,
+  chatID: number
+): Promise<number | null> {
+  const CONFIG_DIR = path.resolve(__dirname, "../config");
+  const RATE_FILE  = path.join(CONFIG_DIR, "rate.txt");
+
+  const ensureRateFile = () => {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    if (!fs.existsSync(RATE_FILE)) fs.writeFileSync(RATE_FILE, "0", "utf-8");
+  };
+  const readRate = (): number => {
+    ensureRateFile();
+    const raw = fs.readFileSync(RATE_FILE, "utf-8").trim();
+    const r = parseFloat(raw.replace(",", "."));
+    return isNaN(r) || r <= 0 ? 0 : r;
+  };
+  const writeRate = (rate: number) => {
+    ensureRateFile();
+    fs.writeFileSync(RATE_FILE, rate.toString(), "utf-8");
+  };
+
+  const askNumber = (prompt: string, error: string): Promise<number> =>
+    new Promise((resolve) => {
+      bot.sendMessage(chatID, prompt);
+      const handler = (msg: any) => {
+        if (msg.chat?.id !== chatID || !msg.text) return;
+        const v = parseFloat(msg.text.replace(",", ".").trim());
+        if (!isNaN(v) && v > 0) {
+          bot.removeListener("message", handler);
+          resolve(v);
+        } else {
+          bot.sendMessage(chatID, error);
+        }
+      };
+      bot.on("message", handler);
+    });
+
+  const askChoice = (
+    prompt: string,
+    opts: { text: string; callback_data: string }[]
+  ): Promise<string> =>
+    new Promise((resolve) => {
+      bot.sendMessage(chatID, prompt, { reply_markup: { inline_keyboard: [opts] } });
+      const handler = async (cb: any) => {
+        if (cb.from?.id !== chatID) return;
+        const match = opts.find((o) => o.callback_data === cb.data);
+        if (!match) return;
+        await bot.answerCallbackQuery(cb.id);
+        bot.removeListener("callback_query", handler);
+        resolve(cb.data);
+      };
+      bot.on("callback_query", handler);
+    });
+
+  try {
+    let rate = readRate();
+
+    if (rate > 0) {
+      const choice = await askChoice(
+        `Курс PayPal: ${rate.toFixed(2)} ₴\nВикористати цей курс?`,
+        [
+          { text: "OK",      callback_data: "RATE_OK" },
+          { text: "Змінити", callback_data: "RATE_CHANGE" },
+        ]
+      );
+
+      if (choice === "RATE_CHANGE") {
+        const newRate = await askNumber("Введіть курс PayPal (₴):", "Введіть коректний курс:");
+        writeRate(newRate);
+        await bot.sendMessage(chatID, `Курс оновлено: ${rate.toFixed(2)} ₴ → ${newRate.toFixed(2)} ₴`);
+        return newRate;
+      } else {
+        await bot.sendMessage(chatID, `Курс залишено без змін: ${rate.toFixed(2)} ₴`);
+        return rate;
+      }
+    } else {
+      const newRate = await askNumber("Введіть курс PayPal (₴):", "Введіть коректний курс:");
+      writeRate(newRate);
+      await bot.sendMessage(chatID, `Курс збережено: ${newRate.toFixed(2)} ₴`);
+      return newRate;
+    }
+  } catch {
+    await bot.sendMessage(chatID, "Сталася помилка під час оновлення курсу.");
+    return null;
+  }
+}

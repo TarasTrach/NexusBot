@@ -3,6 +3,8 @@ import convertYoutubeVideoToMp3 from "../services/convertYoutubeVideoToMp3.servi
 import {
   exchangeObnalSchemaLive,
   exchangePaypalToUsdtLive,
+  getSecondTopFullFeePercentOnce,
+  updatePaypalRate,
 } from "../services/crypto.service";
 import { randomizePassword } from "../utils/randomizers";
 
@@ -10,10 +12,11 @@ const adminChatID = 891948666;
 
 export function startBot(bot: TelegramAPI) {
   bot.setMyCommands([
+    { command: "/fees", description: "PayPal/Payoneer fees" },
     { command: "/convertmp3", description: "Convert YouTube video to MP3" },
-    { command: "/obnal", description: "Calculate obnal exchange" },
-    { command: "/randomizepass", description: "Randomize password" },
+    { command: "/updatepaypalrate", description: "PayPal update rate" },
     { command: "/paypal", description: "PayPal exchange" },
+    { command: "/randomizepass", description: "Randomize password" },
   ]);
 
   bot.on("message", async (msg: TelegramAPI.Message) => {
@@ -23,10 +26,9 @@ export function startBot(bot: TelegramAPI) {
     try {
       switch (text) {
         case "/convertmp3":
+          if (chatID !== adminChatID) break;
           bot.sendMessage(chatID, "Send me a YouTube video link");
-          bot.once("message", async (msg: TelegramAPI.Message) =>
-            convertYoutubeVideoToMp3(chatID, bot, msg.text ?? "")
-          );
+          bot.once("message", async (msg: TelegramAPI.Message) => convertYoutubeVideoToMp3(chatID, bot, msg.text ?? ""));
           break;
 
         case "/obnal":
@@ -34,26 +36,20 @@ export function startBot(bot: TelegramAPI) {
           break;
 
         case "/randomizepass": {
-          bot.sendMessage(
-            chatID,
-            "Будь ласка, надішліть ваше ім'я та прізвище через пробіл"
-          );
+          if (chatID !== adminChatID) break;
+          bot.sendMessage(chatID, "Будь ласка, надішліть ваше ім'я та прізвище через пробіл");
           bot.once("message", async (msg: TelegramAPI.Message) => {
             try {
               const args = msg.text?.split(" ") || [];
               if (args.length < 2) {
-                bot.sendMessage(
-                  chatID,
-                  "Будь ласка, використовуйте формат: FirstName LastName"
-                );
+                bot.sendMessage(chatID, "Будь ласка, використовуйте формат: FirstName LastName");
                 return;
               }
               const firstName = args[0].toLowerCase();
               const lastName = args[1].toLowerCase();
 
               const password = randomizePassword();
-              const emailPassword =
-                password.slice(0, 4) + "E" + password.slice(4);
+              const emailPassword = password.slice(0, 4) + "E" + password.slice(4);
 
               const fourRandom = password.slice(7, 11);
 
@@ -69,13 +65,56 @@ export function startBot(bot: TelegramAPI) {
         }
 
         case "/paypal": {
-          if (chatID === adminChatID)
-            await exchangePaypalToUsdtLive(chatID, bot);
+          if (chatID === adminChatID) await exchangePaypalToUsdtLive(chatID, bot);
           break;
         }
 
-        case "/test": {
-          if (chatID === adminChatID) {
+        case "/updatepaypalrate": {
+          if (chatID !== adminChatID) break;
+          await updatePaypalRate(bot, chatID);
+          break;
+        }
+
+        case "/fees": {
+          const sent = await bot.sendMessage(chatID, "Loading...");
+
+          try {
+            const fee = await getSecondTopFullFeePercentOnce();
+
+            const fmt = (n: number) => Number(n.toFixed(1)).toFixed(1);
+            const row = (label: string, val: string) => `${label.padEnd(12)}= ${val}`;
+
+            let text: string;
+
+            if (fee == null) {
+              text = `<pre>Error, try again</pre>`;
+            } else {
+              const block = [
+                "| PayPal -> USDT |",
+                row("$100-200", `${fmt(fee + 1)}%`),
+                row("$200-600", `${fmt(fee)}%`),
+                row("$600-1000", `${fmt(fee - 0.2)}%`),
+                row("$1000+", `${fmt(fee - 0.5)}%`),
+                "",
+                "| Payoneer -> USDT |",
+                row("$200-500", `${fmt(4)}%`),
+                row("$500-1000", `${fmt(4 - 0.2)}%`),
+                row("$1000+", `${fmt(4 - 0.5)}%`),
+              ].join("\n");
+
+              text = `<pre>${block}</pre>`;
+            }
+
+            await bot.editMessageText(text, {
+              chat_id: chatID,
+              message_id: sent.message_id,
+              parse_mode: "HTML",
+            });
+          } catch {
+            await bot.editMessageText("Error, try again", {
+              chat_id: chatID,
+              message_id: sent.message_id,
+            });
           }
           break;
         }
