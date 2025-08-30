@@ -5,6 +5,7 @@ import {
   exchangePaypalToUsdtLive,
   getSecondTopFullFeePercentOnce,
   updatePaypalRate,
+  updateDiscountAndUsd,
 } from "../services/crypto.service";
 import { randomizePassword } from "../utils/randomizers";
 
@@ -12,11 +13,12 @@ const adminChatID = 891948666;
 
 export function startBot(bot: TelegramAPI) {
   bot.setMyCommands([
-    { command: "/fees", description: "PayPal/Payoneer fees" },
     { command: "/convertmp3", description: "Convert YouTube video to MP3" },
-    { command: "/updatepaypalrate", description: "PayPal update rate" },
-    { command: "/paypal", description: "PayPal exchange" },
     { command: "/randomizepass", description: "Randomize password" },
+    { command: "/paypalrate", description: "PayPal update rate" },
+    { command: "/settings", description: "Update settings" },
+    { command: "/exchange", description: "PayPal exchange" },
+    { command: "/cryptofees", description: "PayPal/Payoneer fees" },
   ]);
 
   bot.on("message", async (msg: TelegramAPI.Message) => {
@@ -32,7 +34,8 @@ export function startBot(bot: TelegramAPI) {
           break;
 
         case "/obnal":
-          if (chatID === adminChatID) exchangeObnalSchemaLive(chatID, bot);
+          if (chatID !== adminChatID) break;
+          exchangeObnalSchemaLive(chatID, bot);
           break;
 
         case "/randomizepass": {
@@ -64,58 +67,27 @@ export function startBot(bot: TelegramAPI) {
           break;
         }
 
-        case "/paypal": {
-          if (chatID === adminChatID) await exchangePaypalToUsdtLive(chatID, bot);
+        case "/exchange": {
+          if (chatID !== adminChatID) break;
+          await exchangePaypalToUsdtLive(chatID, bot);
           break;
         }
 
-        case "/updatepaypalrate": {
+        case "/paypalrate": {
           if (chatID !== adminChatID) break;
           await updatePaypalRate(bot, chatID);
           break;
         }
 
-        case "/fees": {
-          const sent = await bot.sendMessage(chatID, "Loading...");
+        case "/settings": {
+          if (chatID !== adminChatID) break;
+          await updateDiscountAndUsd(bot, chatID);
+          break;
+        }
 
-          try {
-            const fee = await getSecondTopFullFeePercentOnce();
-
-            const fmt = (n: number) => Number(n.toFixed(1)).toFixed(1);
-            const row = (label: string, val: string) => `${label.padEnd(12)}= ${val}`;
-
-            let text: string;
-
-            if (fee == null) {
-              text = `<pre>Error, try again</pre>`;
-            } else {
-              const block = [
-                "| PayPal -> USDT |",
-                row("$100-200", `${fmt(fee + 1)}%`),
-                row("$200-600", `${fmt(fee)}%`),
-                row("$600-1000", `${fmt(fee - 0.2)}%`),
-                row("$1000+", `${fmt(fee - 0.5)}%`),
-                "",
-                "| Payoneer -> USDT |",
-                row("$200-500", `${fmt(4)}%`),
-                row("$500-1000", `${fmt(4 - 0.2)}%`),
-                row("$1000+", `${fmt(4 - 0.5)}%`),
-              ].join("\n");
-
-              text = `<pre>${block}</pre>`;
-            }
-
-            await bot.editMessageText(text, {
-              chat_id: chatID,
-              message_id: sent.message_id,
-              parse_mode: "HTML",
-            });
-          } catch {
-            await bot.editMessageText("Error, try again", {
-              chat_id: chatID,
-              message_id: sent.message_id,
-            });
-          }
+        case "/cryptofees": {
+          if (chatID !== adminChatID) break;
+          await getSecondTopFullFeePercentOnce(bot, chatID);
           break;
         }
 

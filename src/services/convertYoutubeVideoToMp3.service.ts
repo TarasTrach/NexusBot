@@ -44,7 +44,6 @@ export default async function convertYoutubeVideoToMp3(
     const thumbnailPath = path.join(cacheDir, `${videoTitle}.jpg`);
 
     await downloadYouTubeAudio(url, videoPath);
-    console.log("Downloaded YouTube audio");
     await downloadThumbnail(thumbnailUrl, thumbnailPath);
     await convertToMp3(videoPath, audioPath);
 

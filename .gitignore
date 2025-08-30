@@ -96,7 +96,6 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
-rate.txt
 
 # Gatsby files
 .cache/
@@ -145,3 +144,10 @@ rate.txt
 .svelte-kit
 
 # End of https://www.toptal.com/developers/gitignore/api/node
+
+
+
+rate.txt
+discount_percent.txt
+usd_amount.txt
+order_index.txt
