@@ -1,10 +1,5 @@
 import TelegramAPI from "node-telegram-bot-api";
-import {
-  searchAllP2P,
-  P2POrderWithExchange,
-  okxP2P,
-  binanceP2P,
-} from "../utils/crypto/p2pFetchers";
+import { searchAllP2P, P2POrderWithExchange, okxP2P, binanceP2P } from "../utils/crypto/p2pFetchers";
 import fs from "fs";
 import path from "path";
 
@@ -33,47 +28,27 @@ export async function exchangeObnalSchema(chatID: number, bot: TelegramAPI) {
     return;
   }
 
-  const heading =
-    query.tradeType === "SELL"
-      ? `🔴 SELL ${query.asset} to ${query.fiat}`
-      : `🟢 BUY  ${query.asset} for ${query.fiat}`;
+  const heading = query.tradeType === "SELL" ? `🔴 SELL ${query.asset} to ${query.fiat}` : `🟢 BUY  ${query.asset} for ${query.fiat}`;
 
   /* 2. Сортуємо та беремо топ-5 */
-  const sorted = [...orders].sort((a, b) =>
-    query.tradeType === "SELL" ? b.price - a.price : a.price - b.price
-  );
+  const sorted = [...orders].sort((a, b) => (query.tradeType === "SELL" ? b.price - a.price : a.price - b.price));
   const top5 = sorted.slice(0, 5);
 
   const formatOrder = (o: P2POrderWithExchange) =>
     [
       `🏷 ${o.exchange}`,
       `💰 Ціна: ${o.price} ${query.fiat}`,
-      `🔢 Ліміт: ${o.minSingleTransAmount} - ${o.maxSingleTransAmount} ${
-        query.tradeType == "SELL" ? query.fiat : query.asset
-      }`,
+      `🔢 Ліміт: ${o.minSingleTransAmount} - ${o.maxSingleTransAmount} ${query.tradeType == "SELL" ? query.fiat : query.asset}`,
       `🤝 Продавець: ${o.nickname ?? "—"}`,
     ].join("\n");
 
-  const message = [
-    heading,
-    "",
-    ...top5.map((o, idx) => `#${idx + 1}  ${formatOrder(o)}\n`),
-  ].join("\n");
+  const message = [heading, "", ...top5.map((o, idx) => `#${idx + 1}  ${formatOrder(o)}\n`)].join("\n");
 
   await bot.sendMessage(chatID, message);
 }
 
-export async function exchangeObnalSchemaLive(
-  chatID: number,
-  bot: TelegramAPI,
-  updateIntervalSec = 30
-) {
-  const nicknameExceptions = new Set<string>([
-    "FatumaHassan9009",
-    "double⏩",
-    "Fastious",
-    "basso💵",
-  ]);
+export async function exchangeObnalSchemaLive(chatID: number, bot: TelegramAPI, updateIntervalSec = 30) {
+  const nicknameExceptions = new Set<string>(["FatumaHassan9009", "double⏩", "Fastious", "basso💵"]);
 
   const query = {
     asset: "USDT",
@@ -91,13 +66,9 @@ export async function exchangeObnalSchemaLive(
         ? `🔴 SELL ${query.asset} to ${query.fiat} (🔃 ${updateIntervalSec} sec interval)`
         : `🟢 BUY  ${query.asset} for ${query.fiat} (🔃 ${updateIntervalSec} sec interval)`;
 
-    const filtered = orders.filter(
-      (o) => !nicknameExceptions.has(o.nickname ?? "")
-    );
+    const filtered = orders.filter((o) => !nicknameExceptions.has(o.nickname ?? ""));
 
-    const sorted = [...filtered].sort((a, b) =>
-      query.tradeType === "SELL" ? b.price - a.price : a.price - b.price
-    );
+    const sorted = [...filtered].sort((a, b) => (query.tradeType === "SELL" ? b.price - a.price : a.price - b.price));
     const top5 = sorted.slice(0, 5);
 
     return [
@@ -106,9 +77,7 @@ export async function exchangeObnalSchemaLive(
         [
           `#${i + 1}  🏷 ${o.exchange}`,
           `💰 ${o.price} ${query.fiat} ${o.price >= 0.95 ? "🟢" : ""}`,
-          `🔢 ${o.minSingleTransAmount} – ${o.maxSingleTransAmount} ${
-            query.tradeType === "SELL" ? query.fiat : query.asset
-          }`,
+          `🔢 ${o.minSingleTransAmount} – ${o.maxSingleTransAmount} ${query.tradeType === "SELL" ? query.fiat : query.asset}`,
           `🤝 ${o.nickname ?? "—"}`,
         ].join("\n")
       ),
@@ -151,10 +120,7 @@ export async function exchangeObnalSchemaLive(
   bot.once("callback_query", async (cb) => {
     if (cb.data === "STOP_LIVE" && cb.message?.message_id === messageId) {
       clearInterval(interval);
-      await bot.editMessageReplyMarkup(
-        { inline_keyboard: [] },
-        { chat_id: chatID, message_id: messageId }
-      );
+      await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatID, message_id: messageId });
       await bot.answerCallbackQuery(cb.id, {
         text: "Live updates stopped",
       });
@@ -189,9 +155,7 @@ export async function testOne(chatID: number, bot: TelegramAPI) {
   }
 
   const headerHtml =
-    query.tradeType === "SELL"
-      ? `🔴 <b>SELL ${query.asset} → ${query.fiat}</b>`
-      : `🟢 <b>BUY  ${query.asset} ← ${query.fiat}</b>`;
+    query.tradeType === "SELL" ? `🔴 <b>SELL ${query.asset} → ${query.fiat}</b>` : `🟢 <b>BUY  ${query.asset} ← ${query.fiat}</b>`;
 
   const blocks = top5.map((o, idx) => {
     const nick = escapeHTML(o.nickname);
@@ -218,11 +182,7 @@ function escapeHTML(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export async function exchangePaypalToUsdtLive(
-  chatID: number,
-  bot: TelegramAPI,
-  intervalSec = 10
-) {
+export async function exchangePaypalToUsdtLive(chatID: number, bot: TelegramAPI, intervalSec = 10) {
   const CONFIG_DIR = path.resolve(__dirname, "../config");
   const RATE_FILE = path.join(CONFIG_DIR, "rate.txt");
 
@@ -262,10 +222,7 @@ export async function exchangePaypalToUsdtLive(
       bot.on("message", handler);
     });
 
-  const askChoice = (
-    prompt: string,
-    opts: { text: string; callback_data: string }[]
-  ): Promise<string> =>
+  const askChoice = (prompt: string, opts: { text: string; callback_data: string }[]): Promise<string> =>
     new Promise((resolve) => {
       bot.sendMessage(chatID, prompt, { reply_markup: { inline_keyboard: [opts] } });
       const handler = async (cb: any) => {
@@ -293,13 +250,10 @@ export async function exchangePaypalToUsdtLive(
   let rateChanged = false;
 
   if (rate > 0) {
-    const choice = await askChoice(
-      `Курс PayPal: ${rate.toFixed(2)} ₴\nВикористати цей курс?`,
-      [
-        { text: "OK", callback_data: "RATE_OK" },
-        { text: "Змінити", callback_data: "RATE_CHANGE" },
-      ]
-    );
+    const choice = await askChoice(`Курс PayPal: ${rate.toFixed(2)} ₴\nВикористати цей курс?`, [
+      { text: "OK", callback_data: "RATE_OK" },
+      { text: "Змінити", callback_data: "RATE_CHANGE" },
+    ]);
 
     if (choice === "RATE_CHANGE") {
       rate = await askNumber("Введіть курс PayPal (₴):", "Введіть коректний курс:");
@@ -352,9 +306,7 @@ export async function exchangePaypalToUsdtLive(
       });
 
       const suitable = orders.filter(
-        (o) =>
-          (o.minSingleTransAmount <= amountUAH && o.maxSingleTransAmount >= amountUAH) ||
-          (o.recentOrderNum ?? 0) > 3
+        (o) => (o.minSingleTransAmount <= amountUAH && o.maxSingleTransAmount >= amountUAH) || (o.recentOrderNum ?? 0) > 3
       );
 
       let newText: string;
@@ -393,9 +345,7 @@ export async function exchangePaypalToUsdtLive(
         lastText = newText;
       }
 
-      const cheapest = suitable
-        .filter((o) => o.raw?.orderNum > 5)
-        .sort((a, b) => a.price - b.price)[0];
+      const cheapest = suitable.filter((o) => o.raw?.orderNum > 5).sort((a, b) => a.price - b.price)[0];
 
       if (cheapest && cheapest.price < rate && lastAlertPrice !== cheapest.price) {
         await bot.sendMessage(chatID, `Знайдено ${cheapest.price.toFixed(2)} ₴ < ${rate.toFixed(2)} ₴`);
@@ -450,10 +400,19 @@ export async function getSecondTopFullFeePercentOnce(bot?: TelegramAPI, chatID?:
   const paramsEqual = (a: FeeCacheEntry["params"], b: FeeCacheEntry["params"]) =>
     a.rate === b.rate && a.usdAmount === b.usdAmount && a.discountPercent === b.discountPercent && a.orderIndex === b.orderIndex;
 
-  if (_secondTopFullFeeCache && now - _secondTopFullFeeCache.lastComputed < CACHE_TTL_MS && paramsEqual(_secondTopFullFeeCache.params, params)) {
+  if (
+    _secondTopFullFeeCache &&
+    now - _secondTopFullFeeCache.lastComputed < CACHE_TTL_MS &&
+    paramsEqual(_secondTopFullFeeCache.params, params)
+  ) {
     if (bot && chatID != null) {
       try {
-        await bot.sendMessage(chatID, _secondTopFullFeeCache.formattedMessage, /<pre>/.test(_secondTopFullFeeCache.formattedMessage) ? { parse_mode: "HTML" } as any : undefined);
+        const parseMode = /<b>/i.test(_secondTopFullFeeCache.formattedMessage) ? ("HTML" as const) : undefined;
+        await bot.sendMessage(
+          chatID,
+          _secondTopFullFeeCache.formattedMessage,
+          parseMode ? ({ parse_mode: parseMode } as any) : undefined
+        );
       } catch {}
     }
     return _secondTopFullFeeCache.feePercent;
@@ -461,7 +420,9 @@ export async function getSecondTopFullFeePercentOnce(bot?: TelegramAPI, chatID?:
 
   let loadingMsg: { message_id: number } | null = null;
   if (bot && chatID != null) {
-    try { loadingMsg = await bot.sendMessage(chatID, "Updating fees..."); } catch {}
+    try {
+      loadingMsg = await bot.sendMessage(chatID, "Updating fees...");
+    } catch {}
   }
 
   const amountUAH = rate > 0 ? Math.floor((usdAmount * rate) / 10) * 10 : 0;
@@ -482,9 +443,7 @@ export async function getSecondTopFullFeePercentOnce(bot?: TelegramAPI, chatID?:
         page: 1,
       });
       const suitable = orders.filter(
-        (o: any) =>
-          (o.minSingleTransAmount <= amountUAH && o.maxSingleTransAmount >= amountUAH) ||
-          (o.recentOrderNum ?? 0) > 3
+        (o: any) => (o.minSingleTransAmount <= amountUAH && o.maxSingleTransAmount >= amountUAH) || (o.recentOrderNum ?? 0) > 3
       );
       if (suitable.length < 2) return null;
       const top10 = [...suitable].sort((a: any, b: any) => a.price - b.price).slice(0, 10);
@@ -506,51 +465,67 @@ export async function getSecondTopFullFeePercentOnce(bot?: TelegramAPI, chatID?:
   const feePercent = await computeFee();
 
   const fmt = (n: number) => Number(n.toFixed(1)).toFixed(1);
-  const row = (label: string, val: string) => `${label.padEnd(12)}= ${val}`;
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2, "0");
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const yyyy = today.getFullYear();
+  const dateStr = `${dd}.${mm}.${yyyy}`;
+
   let text: string;
   if (rate <= 0) {
     text = "Rate not set. Update PayPal rate first.";
   } else if (feePercent == null) {
-    text = `<pre>Error, try again</pre>`;
+    text = "Error, try again";
   } else {
     const fee = feePercent;
-    const block = [
-      "| PayPal -> USDT |",
-      row("$100-200", `${fmt(fee + 1)}%`),
-      row("$200-600", `${fmt(fee)}%`),
-      row("$600-1000", `${fmt(fee - 0.2)}%`),
-      row("$1000+", `${fmt(fee - 0.5)}%`),
-      "",
-      "| Payoneer -> USDT |",
-      row("$200-500", `${fmt(3.4)}%`),
-      row("$500-1000", `${fmt(3.4 - 0.6)}%`),
-      row("$1000+", `${fmt(3.4 - 1.1)}%`),
-    ].join("\n");
-    text = `<pre>${block}</pre>`;
-  }
+    const paypalRows: Array<[string, string]> = [
+      ["$100-200", `${fmt(fee + 1)}%`],
+      ["$200-600", `${fmt(fee)}%`],
+      ["$600-1000", `${fmt(fee - 0.2)}%`],
+      ["$1000+", `${fmt(fee - 0.5)}%`],
+    ];
+    const payoneerRows: Array<[string, string]> = [
+      ["$200-500", `${fmt(3.4)}%`],
+      ["$500-1000", `${fmt(3.4 - 0.6)}%`],
+      ["$1000+", `${fmt(3.4 - 1.1)}%`],
+    ];
+    const allLabels = [...paypalRows, ...payoneerRows].map((r) => r[0]);
+    const maxLen = Math.max(...allLabels.map((l) => l.length));
+    const formatRow = (label: string, val: string) => label.padEnd(maxLen, " ") + "  = " + val;
 
+    const lines = [
+      `<b>Crypto exchange fees on ${dateStr}</b>`,
+      "",
+      `<b>| PayPal -> USDT |</b>`,
+      ...paypalRows.map(([l, v]) => formatRow(l, v)),
+      "",
+      `<b>| Payoneer -> USDT |</b>`,
+      ...payoneerRows.map(([l, v]) => formatRow(l, v)),
+    ];
+    const mergedBlock = `<pre>${lines.join("\n")}</pre>`;
+    text = `${mergedBlock}\n\n<b>Contact: @TarasUpwork</b>`;
+  }
   if (bot && chatID != null && loadingMsg) {
     try {
-      await bot.editMessageText(text, { chat_id: chatID, message_id: loadingMsg.message_id, parse_mode: /<pre>/.test(text) ? "HTML" : undefined });
+      await bot.editMessageText(text, {
+        chat_id: chatID,
+        message_id: loadingMsg.message_id,
+        parse_mode: /<b>/i.test(text) ? "HTML" : undefined,
+      });
     } catch {}
   }
-
   _secondTopFullFeeCache = {
     feePercent,
     lastComputed: now,
     params,
     formattedMessage: text,
   };
-
   return feePercent;
 }
 
-export async function updatePaypalRate(
-  bot: TelegramAPI,
-  chatID: number
-): Promise<number | null> {
+export async function updatePaypalRate(bot: TelegramAPI, chatID: number): Promise<number | null> {
   const CONFIG_DIR = path.resolve(__dirname, "../config");
-  const RATE_FILE  = path.join(CONFIG_DIR, "rate.txt");
+  const RATE_FILE = path.join(CONFIG_DIR, "rate.txt");
 
   const ensureRateFile = () => {
     if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
@@ -571,9 +546,10 @@ export async function updatePaypalRate(
     let currentRate = readRate();
     const callbackId = "PAYPAL_RATE_OK";
 
-    const introText = currentRate > 0
-      ? `Поточний курс: ${currentRate.toFixed(2)} ₴\nВведіть новий курс або натисніть OK щоб залишити без змін.`
-      : `Курс ще не встановлено. Введіть новий курс (число) або натисніть OK щоб скасувати.`;
+    const introText =
+      currentRate > 0
+        ? `Поточний курс: ${currentRate.toFixed(2)} ₴\nВведіть новий курс або натисніть OK щоб залишити без змін.`
+        : `Курс ще не встановлено. Введіть новий курс (число) або натисніть OK щоб скасувати.`;
 
     const sent = await bot.sendMessage(chatID, introText, {
       reply_markup: { inline_keyboard: [[{ text: "OK", callback_data: callbackId }]] },
@@ -603,9 +579,7 @@ export async function updatePaypalRate(
         writeRate(v);
         await bot.sendMessage(
           chatID,
-          old > 0
-            ? `Курс оновлено: ${old.toFixed(2)} ₴ → ${v.toFixed(2)} ₴`
-            : `Курс збережено: ${v.toFixed(2)} ₴`
+          old > 0 ? `Курс оновлено: ${old.toFixed(2)} ₴ → ${v.toFixed(2)} ₴` : `Курс збережено: ${v.toFixed(2)} ₴`
         );
         try {
           await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatID, message_id: sent.message_id });
@@ -615,13 +589,10 @@ export async function updatePaypalRate(
 
       const onCallback = async (cb: any) => {
         if (cb.from?.id !== chatID || cb.data !== callbackId) return;
-        try { await bot.answerCallbackQuery(cb.id); } catch {}
-        await bot.sendMessage(
-          chatID,
-          currentRate > 0
-            ? `Курс залишено без змін: ${currentRate.toFixed(2)} ₴`
-            : `Операцію скасовано.`
-        );
+        try {
+          await bot.answerCallbackQuery(cb.id);
+        } catch {}
+        await bot.sendMessage(chatID, currentRate > 0 ? `Курс залишено без змін: ${currentRate.toFixed(2)} ₴` : `Операцію скасовано.`);
         try {
           await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatID, message_id: sent.message_id });
         } catch {}
@@ -639,7 +610,10 @@ export async function updatePaypalRate(
 
 const _activeUpdateDiscountSessions = new Map<number, { onCb: any; onMsg: any }>();
 
-export async function updateDiscountAndUsd(bot: TelegramAPI, chatID: number): Promise<{ discountPercent: number; usdAmount: number; orderIndex: number } | null> {
+export async function updateDiscountAndUsd(
+  bot: TelegramAPI,
+  chatID: number
+): Promise<{ discountPercent: number; usdAmount: number; orderIndex: number } | null> {
   const prev = _activeUpdateDiscountSessions.get(chatID);
   if (prev) {
     bot.removeListener("callback_query", prev.onCb);
@@ -690,9 +664,7 @@ export async function updateDiscountAndUsd(bot: TelegramAPI, chatID: number): Pr
           page: 1,
         });
         const suitable = orders.filter(
-          (o: any) =>
-            (o.minSingleTransAmount <= amountUAH && o.maxSingleTransAmount >= amountUAH) ||
-            (o.recentOrderNum ?? 0) > 3
+          (o: any) => (o.minSingleTransAmount <= amountUAH && o.maxSingleTransAmount >= amountUAH) || (o.recentOrderNum ?? 0) > 3
         );
         if (!suitable.length) return { feePercent: null, orderPrice: null };
         const top10 = [...suitable].sort((a: any, b: any) => a.price - b.price).slice(0, 10);
@@ -724,18 +696,19 @@ export async function updateDiscountAndUsd(bot: TelegramAPI, chatID: number): Pr
       ],
     });
 
-    const renderText = () => `Поточні значення:\n` +
+    const renderText = () =>
+      `Поточні значення:\n` +
       `Мій відсоток: ${discountPercent}%\n` +
       `Сума usd для ордерів: ${usdAmount}\n` +
       `Порядковий номер ордеру: ${Math.floor(orderIndex)}\n` +
-      `Fee (%): ${metrics.feePercent != null ? metrics.feePercent.toFixed(1) : '—'}\n\n` +
+      `Fee (%): ${metrics.feePercent != null ? metrics.feePercent.toFixed(1) : "—"}\n\n` +
       `Натисніть кнопку щоб змінити або OK щоб зберегти.`;
 
     const sent = await bot.sendMessage(chatID, renderText(), { reply_markup: baseKeyboard() });
 
     let mode: null | "discount" | "usd" | "order" = null;
 
-    return await new Promise(resolve => {
+    return await new Promise((resolve) => {
       const cleanup = () => {
         bot.removeListener("callback_query", onCb as any);
         bot.removeListener("message", onMsg as any);
@@ -761,7 +734,9 @@ export async function updateDiscountAndUsd(bot: TelegramAPI, chatID: number): Pr
         if (cb.from?.id !== chatID) return;
         const data = cb.data;
         if (!data) return;
-        try { await bot.answerCallbackQuery(cb.id); } catch {}
+        try {
+          await bot.answerCallbackQuery(cb.id);
+        } catch {}
 
         if (data === "CFG_EDIT_DISCOUNT") {
           mode = "discount";
@@ -770,7 +745,7 @@ export async function updateDiscountAndUsd(bot: TelegramAPI, chatID: number): Pr
         }
         if (data === "CFG_EDIT_USD") {
           mode = "usd";
-            await askPrompt();
+          await askPrompt();
           return;
         }
         if (data === "CFG_EDIT_ORDER_INDEX") {
@@ -782,7 +757,10 @@ export async function updateDiscountAndUsd(bot: TelegramAPI, chatID: number): Pr
           try {
             await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatID, message_id: sent.message_id });
           } catch {}
-          await bot.sendMessage(chatID, `Збережено:\n discount_percent: ${discountPercent}\n usd_amount: ${usdAmount}\n order_index: ${Math.floor(orderIndex)}`);
+          await bot.sendMessage(
+            chatID,
+            `Збережено:\n discount_percent: ${discountPercent}\n usd_amount: ${usdAmount}\n order_index: ${Math.floor(orderIndex)}`
+          );
           finish({ discountPercent, usdAmount, orderIndex: Math.floor(orderIndex) });
           return;
         }
@@ -791,7 +769,7 @@ export async function updateDiscountAndUsd(bot: TelegramAPI, chatID: number): Pr
       const onMsg = async (msg: any) => {
         if (msg.chat?.id !== chatID || !msg.text) return;
         if (!mode) return;
-        if (msg.text.startsWith('/')) return;
+        if (msg.text.startsWith("/")) return;
         const v = parseFloat(msg.text.replace(",", ".").trim());
         if (isNaN(v) || v <= 0) {
           await bot.sendMessage(chatID, "Невірне число, спробуйте ще раз.");
