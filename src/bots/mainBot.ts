@@ -6,6 +6,7 @@ import {
   getSecondTopFullFeePercentOnce,
   updatePaypalRate,
   updateDiscountAndUsd,
+  calculatePaypalAmountForCrypto,
 } from "../services/crypto.service";
 import { randomizePassword } from "../utils/randomizers";
 
@@ -18,7 +19,7 @@ export function startBot(bot: TelegramAPI) {
     { command: "/paypalrate", description: "PayPal update rate" },
     { command: "/settings", description: "Update settings" },
     { command: "/exchange", description: "PayPal exchange" },
-    { command: "/cryptofees", description: "PayPal/Payoneer fees" },
+    { command: "/bybit", description: "Bybit" },
   ]);
 
   bot.on("message", async (msg: TelegramAPI.Message) => {
@@ -85,9 +86,9 @@ export function startBot(bot: TelegramAPI) {
           break;
         }
 
-        case "/cryptofees": {
+        case "/bybit": {
           if (chatID !== adminChatID) break;
-          await getSecondTopFullFeePercentOnce(bot, chatID);
+          await calculatePaypalAmountForCrypto(bot, chatID);
           break;
         }
 

@@ -2,6 +2,7 @@ import TelegramAPI from "node-telegram-bot-api";
 import { searchAllP2P, P2POrderWithExchange, okxP2P, binanceP2P } from "../utils/crypto/p2pFetchers";
 import fs from "fs";
 import path from "path";
+import axios from "axios";
 
 interface FeeCacheEntry {
   feePercent: number | null;
@@ -10,6 +11,65 @@ interface FeeCacheEntry {
   formattedMessage: string;
 }
 let _secondTopFullFeeCache: FeeCacheEntry | null = null;
+
+export async function calculatePaypalAmountForCrypto(
+  bot?: TelegramAPI,
+  chatID?: number
+): Promise<{ paypalAmount: number; expectedUsdt: number; fee: number; feePercent: number }> {
+  const rateFile = path.join(path.resolve(__dirname, "../config"), "rate.txt");
+  if (!fs.existsSync(rateFile)) {
+    throw new Error("Файл rate.txt не знайдено");
+  }
+
+  const rawPaypalRate = fs.readFileSync(rateFile, "utf-8").trim();
+  const paypalRate = parseFloat(rawPaypalRate.replace(",", "."));
+  if (!paypalRate || paypalRate <= 0) {
+    throw new Error("Невірний курс PayPal у rate.txt");
+  }
+
+  const monobankSendAmount = 1000;
+  const monobankPercentFee = 0.01;
+  const monobankFlatFeeUsd = 1;
+  const bybitRate = 1.0015;
+  const monobankTargetUsd = monobankSendAmount * (1 + monobankPercentFee);
+
+  const { data } = await axios.get("https://api.monobank.ua/bank/currency");
+  const entry = Array.isArray(data)
+    ? data.find((item: any) => item.currencyCodeA === 840 && item.currencyCodeB === 980)
+    : null;
+
+  if (!entry) {
+    throw new Error("Монобанк не повернув курс USD/UAH");
+  }
+
+  const monobankRate = entry.rateSell || entry.rateCross || entry.rateBuy;
+  if (!monobankRate) {
+    throw new Error("У відповіді Монобанку не знайдено курс продажу USD");
+  }  
+
+  const paypalUsd = (monobankTargetUsd * monobankRate) / paypalRate;
+  const amountToBybit = monobankTargetUsd / (1 + monobankPercentFee);
+  const amountAfterFlatFee = amountToBybit - monobankFlatFeeUsd;
+  const expectedUsdt = amountAfterFlatFee / bybitRate;
+  const feeUsd = paypalUsd - expectedUsdt;
+  const feePercent = expectedUsdt > 0 ? (feeUsd / expectedUsdt) * 100 : 0;
+
+  const result = {
+    paypalAmount: Number(paypalUsd.toFixed(2)),
+    expectedUsdt: Number(expectedUsdt.toFixed(2)),
+    fee: Number(feeUsd.toFixed(2)),
+    feePercent: Number(feePercent.toFixed(2)),
+  };
+
+  if (bot && typeof chatID === "number") {
+    await bot.sendMessage(
+      chatID,
+      `Переказ з PayPal: ${result.paypalAmount.toFixed(2)} $\nОчікувано на Bybit: ${result.expectedUsdt.toFixed(2)} USDT\nКомісія: ${result.feePercent.toFixed(2)}%`
+    );
+  }
+
+  return result;
+}
 
 export async function exchangeObnalSchema(chatID: number, bot: TelegramAPI) {
   const query = {
@@ -813,3 +873,5 @@ export async function updateDiscountAndUsd(
     return null;
   }
 }
+
+
