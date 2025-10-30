@@ -545,9 +545,9 @@ export async function getSecondTopFullFeePercentOnce(bot?: TelegramAPI, chatID?:
       ["$1000+", `${fmt(fee - 0.5)}%`],
     ];
     const payoneerRows: Array<[string, string]> = [
-      ["$200-500", `${fmt(3.4)}%`],
-      ["$500-1000", `${fmt(3.4 - 0.6)}%`],
-      ["$1000+", `${fmt(3.4 - 1.1)}%`],
+      ["$200-500", `${fmt(4)}%`],
+      ["$500-1000", `${fmt(3.4)}%`],
+      ["$1000+", `${fmt(3.4 - 0.5)}%`],
     ];
     const allLabels = [...paypalRows, ...payoneerRows].map((r) => r[0]);
     const maxLen = Math.max(...allLabels.map((l) => l.length));
