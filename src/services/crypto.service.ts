@@ -71,6 +71,67 @@ export async function calculatePaypalAmountForCrypto(
   return result;
 }
 
+export async function calculatePaypalAmountForNbuLimit(
+  bot?: TelegramAPI,
+  chatID?: number
+): Promise<{ paypalAmount: number; finalUsdAmount: number; fee: number; feePercent: number }> {
+  const rateFile = path.join(path.resolve(__dirname, "../config"), "rate.txt");
+  if (!fs.existsSync(rateFile)) {
+    throw new Error("Файл rate.txt не знайдено");
+  }
+
+  const rawPaypalRate = fs.readFileSync(rateFile, "utf-8").trim();
+  const paypalRate = parseFloat(rawPaypalRate.replace(",", "."));
+  if (!paypalRate || paypalRate <= 0) {
+    throw new Error("Невірний курс PayPal у rate.txt");
+  }
+
+  const nbuLimitUah = 100000;
+  const monobankPercentFee = 0.009;
+
+  const { data } = await axios.get("https://api.monobank.ua/bank/currency");
+  const entry = Array.isArray(data)
+    ? data.find((item: any) => item.currencyCodeA === 840 && item.currencyCodeB === 980)
+    : null;
+
+  if (!entry) {
+    throw new Error("Монобанк не повернув курс USD/UAH");
+  }
+
+  const monobankRate = entry.rateSell || entry.rateCross || entry.rateBuy;
+  if (!monobankRate) {
+    throw new Error("У відповіді Монобанку не знайдено курс продажу USD");
+  }
+
+  const rawUsdTarget = nbuLimitUah / monobankRate;
+  // Round down to the nearest hundred to comply with the NBU limit requirement.
+  const finalUsd = Math.floor(rawUsdTarget / 100) * 100;
+  if (finalUsd <= 0) {
+    throw new Error("Неможливо розрахувати суму за поточним курсом Монобанку");
+  }
+
+  const usdIncludingFee = finalUsd * (1 + monobankPercentFee);
+  const paypalAmountRaw = (usdIncludingFee * monobankRate) / paypalRate + 1;
+  const feeUsdRaw = paypalAmountRaw - finalUsd;
+  const feePercentRaw = (feeUsdRaw / finalUsd) * 100;
+
+  const result = {
+    paypalAmount: Number(paypalAmountRaw.toFixed(2)),
+    finalUsdAmount: Number(finalUsd.toFixed(2)),
+    fee: Number(feeUsdRaw.toFixed(2)),
+    feePercent: Number(feePercentRaw.toFixed(2)),
+  };
+
+  if (bot && typeof chatID === "number") {
+    await bot.sendMessage(
+      chatID,
+      `Початкова сума PayPal: ${result.paypalAmount.toFixed(2)} $\nФінальна сума: ${result.finalUsdAmount.toFixed(2)} $\nКомісія: ${result.feePercent.toFixed(2)}% (${result.fee.toFixed(2)} $)`
+    );
+  }
+
+  return result;
+}
+
 export async function exchangeObnalSchema(chatID: number, bot: TelegramAPI) {
   const query = {
     asset: "USDT",

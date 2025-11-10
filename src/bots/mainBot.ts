@@ -7,6 +7,7 @@ import {
   updatePaypalRate,
   updateDiscountAndUsd,
   calculatePaypalAmountForCrypto,
+  calculatePaypalAmountForNbuLimit,
 } from "../services/crypto.service";
 import { randomizePassword } from "../utils/randomizers";
 
@@ -36,7 +37,7 @@ export function startBot(bot: TelegramAPI) {
 
         case "/obnal":
           if (chatID !== adminChatID) break;
-          exchangeObnalSchemaLive(chatID, bot);
+          calculatePaypalAmountForNbuLimit(bot, chatID);
           break;
 
         case "/randomizepass": {
