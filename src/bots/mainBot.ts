@@ -9,11 +9,14 @@ import {
   calculatePaypalAmountForCrypto,
   calculatePaypalAmountForNbuLimit,
 } from "../services/crypto.service";
+import { requestBirthdayEntry, startBirthdayReminderScheduler } from "../services/birthdayReminder.service";
 import { randomizePassword } from "../utils/randomizers";
 
 const adminChatID = 891948666;
 
 export function startBot(bot: TelegramAPI) {
+  startBirthdayReminderScheduler(bot, adminChatID);
+
   bot.setMyCommands([
     { command: "/convertmp3", description: "Convert YouTube video to MP3" },
     { command: "/randomizepass", description: "Randomize password" },
@@ -21,6 +24,7 @@ export function startBot(bot: TelegramAPI) {
     { command: "/settings", description: "Update settings" },
     { command: "/exchange", description: "PayPal exchange" },
     { command: "/bybit", description: "Bybit" },
+    { command: "/addbirthday", description: "Додати нагадування про ДН" },
   ]);
 
   bot.on("message", async (msg: TelegramAPI.Message) => {
@@ -90,6 +94,12 @@ export function startBot(bot: TelegramAPI) {
         case "/bybit": {
           if (chatID !== adminChatID) break;
           await calculatePaypalAmountForCrypto(bot, chatID);
+          break;
+        }
+
+        case "/addbirthday": {
+          if (chatID !== adminChatID) break;
+          requestBirthdayEntry(bot, chatID);
           break;
         }
 
