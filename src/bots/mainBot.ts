@@ -9,7 +9,11 @@ import {
   calculatePaypalAmountForCrypto,
   calculatePaypalAmountForNbuLimit,
 } from "../services/crypto.service";
-import { requestBirthdayEntry, startBirthdayReminderScheduler } from "../services/birthdayReminder.service";
+import {
+  requestBirthdayEntry,
+  requestBirthdayRemoval,
+  startBirthdayReminderScheduler,
+} from "../services/birthdayReminder.service";
 import { randomizePassword } from "../utils/randomizers";
 
 const adminChatID = 891948666;
@@ -25,6 +29,7 @@ export function startBot(bot: TelegramAPI) {
     { command: "/exchange", description: "PayPal exchange" },
     { command: "/bybit", description: "Bybit" },
     { command: "/addbirthday", description: "Додати нагадування про ДН" },
+    { command: "/removebirthday", description: "Видалити нагадування про ДН" },
   ]);
 
   bot.on("message", async (msg: TelegramAPI.Message) => {
@@ -100,6 +105,12 @@ export function startBot(bot: TelegramAPI) {
         case "/addbirthday": {
           if (chatID !== adminChatID) break;
           requestBirthdayEntry(bot, chatID);
+          break;
+        }
+
+        case "/removebirthday": {
+          if (chatID !== adminChatID) break;
+          requestBirthdayRemoval(bot, chatID);
           break;
         }
 

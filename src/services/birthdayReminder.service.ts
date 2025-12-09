@@ -91,6 +91,55 @@ export function requestBirthdayEntry(bot: TelegramAPI, chatID: number): void {
   bot.once("message", handler);
 }
 
+export function requestBirthdayRemoval(bot: TelegramAPI, chatID: number): void {
+  ensureBirthdayFile();
+  const lines = loadBirthdayLines();
+
+  if (!lines.length) {
+    bot.sendMessage(chatID, "Список днів народжень порожній.");
+    return;
+  }
+
+  const listText = lines.map((line, idx) => `${idx + 1}. ${line}`).join("\n");
+  bot.sendMessage(
+    chatID,
+    `Оберіть номер для видалення (0 — скасувати):\n${listText}`
+  );
+
+  const handler = async (msg: TelegramAPI.Message) => {
+    if (msg.chat.id !== chatID) {
+      return;
+    }
+
+    bot.removeListener("message", handler);
+    const reply = msg.text?.trim();
+    if (!reply) {
+      await bot.sendMessage(chatID, "❌ Порожнє повідомлення. Спробуйте ще раз командою /removebirthday.");
+      return;
+    }
+
+    if (reply === "0") {
+      await bot.sendMessage(chatID, "Скасовано.");
+      return;
+    }
+
+    const index = Number(reply);
+    if (!Number.isInteger(index) || index < 1 || index > lines.length) {
+      await bot.sendMessage(chatID, "❌ Невірний номер. Повторіть команду /removebirthday для нового вибору.");
+      return;
+    }
+
+    try {
+      const removed = await removeBirthdayAtIndex(index - 1);
+      await bot.sendMessage(chatID, `🗑 Видалено: ${removed.removedLine}`);
+    } catch (error: any) {
+      await bot.sendMessage(chatID, `❌ ${error.message}`);
+    }
+  };
+
+  bot.once("message", handler);
+}
+
 async function sendScheduledReminders(bot: TelegramAPI, adminChatID: number): Promise<void> {
   const birthdays = loadBirthdays();
   if (!birthdays.length) {
@@ -124,13 +173,7 @@ async function sendScheduledReminders(bot: TelegramAPI, adminChatID: number): Pr
 }
 
 function loadBirthdays(): BirthdayEntry[] {
-  ensureBirthdayFile();
-  const raw = fs.readFileSync(BIRTHDAY_FILE, "utf-8");
-
-  return raw
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
+  return loadBirthdayLines()
     .map((line) => {
       try {
         return parseBirthdayLine(line);
@@ -142,6 +185,15 @@ function loadBirthdays(): BirthdayEntry[] {
     .filter((entry): entry is BirthdayEntry => Boolean(entry));
 }
 
+function loadBirthdayLines(): string[] {
+  ensureBirthdayFile();
+  const raw = fs.readFileSync(BIRTHDAY_FILE, "utf-8");
+  return raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 async function appendBirthdayEntryFromInput(input: string): Promise<string> {
   const entry = parseBirthdayLine(input);
   const normalizedLine = formatBirthdayEntry(entry);
@@ -150,6 +202,28 @@ async function appendBirthdayEntryFromInput(input: string): Promise<string> {
   const toAppend = `${needsNewLine ? "\n" : ""}${normalizedLine}\n`;
   await fs.promises.appendFile(BIRTHDAY_FILE, toAppend, "utf-8");
   return normalizedLine;
+}
+
+async function removeBirthdayAtIndex(index: number): Promise<{ removedLine: string; removedEntry: BirthdayEntry | null }> {
+  const lines = loadBirthdayLines();
+  if (index < 0 || index >= lines.length) {
+    throw new Error("Немає запису з таким номером");
+  }
+
+  const [removedLine] = lines.splice(index, 1);
+  const parsedEntry = (() => {
+    try {
+      return parseBirthdayLine(removedLine);
+    } catch {
+      return null;
+    }
+  })();
+
+  const nextContent = lines.length ? `${lines.join("\n")}\n` : "";
+  await fs.promises.writeFile(BIRTHDAY_FILE, nextContent, "utf-8");
+  purgeReminderStateForEntry(parsedEntry);
+
+  return { removedLine, removedEntry: parsedEntry };
 }
 
 function parseBirthdayLine(line: string): BirthdayEntry {
@@ -309,6 +383,27 @@ function saveReminderState(state: ReminderState): void {
     fs.writeFileSync(BIRTHDAY_STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
   } catch (error) {
     console.error("[BirthdayReminder] Не вдалося зберегти файл стану.", error);
+  }
+}
+
+function purgeReminderStateForEntry(entry: BirthdayEntry | null): void {
+  if (!entry) {
+    return;
+  }
+
+  const state = loadReminderState();
+  const keysToRemove = [buildReminderKey(entry, "birthday"), buildReminderKey(entry, "advance")];
+  let dirty = false;
+
+  for (const key of keysToRemove) {
+    if (state.sentMap[key]) {
+      delete state.sentMap[key];
+      dirty = true;
+    }
+  }
+
+  if (dirty) {
+    saveReminderState(state);
   }
 }
 
