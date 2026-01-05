@@ -12,10 +12,77 @@ interface FeeCacheEntry {
 }
 let _secondTopFullFeeCache: FeeCacheEntry | null = null;
 
+/**
+ * Отримує чистий P2P відсоток комісії (без discount_percent)
+ * Повертає null якщо не вдалося отримати дані
+ */
+export async function getRawP2PFeePercent(): Promise<number | null> {
+  const CONFIG_DIR = path.resolve(__dirname, "../config");
+  const RATE_FILE = path.join(CONFIG_DIR, "rate.txt");
+  const USD_FILE = path.join(CONFIG_DIR, "usd_amount.txt");
+  const ORDER_INDEX_FILE = path.join(CONFIG_DIR, "order_index.txt");
+
+  const ensureFile = (file: string, def: string) => {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    if (!fs.existsSync(file)) fs.writeFileSync(file, def, "utf-8");
+  };
+  const readNumber = (file: string, def: number): number => {
+    ensureFile(file, String(def));
+    const raw = fs.readFileSync(file, "utf-8").trim();
+    const n = parseFloat(raw.replace(",", "."));
+    return isNaN(n) || n <= 0 ? def : n;
+  };
+
+  const rate = readNumber(RATE_FILE, 0);
+  const usdAmount = readNumber(USD_FILE, 300);
+  const orderIndex = readNumber(ORDER_INDEX_FILE, 1);
+
+  if (rate <= 0) return null;
+
+  const amountUAH = Math.floor((usdAmount * rate) / 10) * 10;
+
+  try {
+    const orders = await searchAllP2P({
+      asset: "USDT",
+      fiat: "UAH",
+      tradeType: "BUY",
+      amount: amountUAH,
+      payTypes: ["Monobank"],
+      rows: 20,
+      page: 1,
+    });
+
+    const suitable = orders.filter(
+      (o: any) =>
+        (o.minSingleTransAmount <= amountUAH && o.maxSingleTransAmount >= amountUAH) ||
+        (o.recentOrderNum ?? 0) > 3
+    );
+    if (suitable.length < 2) return null;
+
+    const top10 = [...suitable].sort((a: any, b: any) => a.price - b.price).slice(0, 10);
+    if (top10.length < 2) return null;
+
+    let idx = Math.floor(orderIndex);
+    if (idx < 0) idx = 0;
+    if (idx >= top10.length) idx = top10.length - 1;
+
+    const order = top10[idx];
+    // Чистий P2P: скільки USDT отримаємо за amountUAH мінус usdAmount
+    const receivedUSDT = amountUAH / order.price;
+    const rawFee = receivedUSDT - usdAmount;
+    // Від'ємне значення = комісія (ми втрачаємо), позитивне = профіт
+    const rawFeePercent = (rawFee / usdAmount) * -100;
+
+    return Number(rawFeePercent.toFixed(2));
+  } catch {
+    return null;
+  }
+}
+
 export async function calculatePaypalAmountForCrypto(
   bot?: TelegramAPI,
   chatID?: number
-): Promise<{ paypalAmount: number; expectedUsdt: number; fee: number; feePercent: number }> {
+): Promise<{ paypalAmount: number; expectedUsdt: number; fee: number; feePercent: number; p2pFeePercent: number | null }> {
   const rateFile = path.join(path.resolve(__dirname, "../config"), "rate.txt");
   if (!fs.existsSync(rateFile)) {
     throw new Error("Файл rate.txt не знайдено");
@@ -54,17 +121,24 @@ export async function calculatePaypalAmountForCrypto(
   const feeUsd = paypalUsd - expectedUsdt;
   const feePercent = expectedUsdt > 0 ? (feeUsd / expectedUsdt) * 100 : 0;
 
+  // Отримуємо чистий P2P відсоток (без discount_percent)
+  const p2pFeePercent = await getRawP2PFeePercent();
+
   const result = {
     paypalAmount: Number(paypalUsd.toFixed(2)),
     expectedUsdt: Number(expectedUsdt.toFixed(2)),
     fee: Number(feeUsd.toFixed(2)),
     feePercent: Number(feePercent.toFixed(2)),
+    p2pFeePercent,
   };
 
   if (bot && typeof chatID === "number") {
+    const p2pInfo = result.p2pFeePercent !== null 
+      ? `\nP2P fee: ${result.p2pFeePercent.toFixed(2)}%` 
+      : "";
     await bot.sendMessage(
       chatID,
-      `Переказ з PayPal: ${result.paypalAmount.toFixed(2)} $\nОчікувано на Bybit: ${result.expectedUsdt.toFixed(2)} USDT\nКомісія: ${result.feePercent.toFixed(2)}%`
+      `Переказ з PayPal: ${result.paypalAmount.toFixed(2)} $\nОчікувано на Bybit: ${result.expectedUsdt.toFixed(2)} USDT\nКомісія: ${result.feePercent.toFixed(2)}%${p2pInfo}`
     );
   }
 
