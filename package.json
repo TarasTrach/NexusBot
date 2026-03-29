@@ -19,7 +19,7 @@
     "typescript": "^5.5.2"
   },
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.9",
+    "@distube/ytdl-core": "^4.16.12",
     "axios": "^1.7.2",
     "cheerio": "^1.0.0-rc.12",
     "dotenv": "^16.5.0",
