@@ -1,38 +1,33 @@
 {
   "name": "nexusbot",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "start": "node dist/index.js",
-    "build": "tsc",
-    "dev": "npm i && nodemon src/index.ts"
-  },
-  "keywords": [],
+  "version": "2.0.0",
+  "description": "Telegram bots (admin + client) for crypto exchange fees and YouTube to MP3 conversion",
   "author": "",
   "license": "ISC",
-  "devDependencies": {
-    "@types/fluent-ffmpeg": "^2.1.24",
-    "@types/node-telegram-bot-api": "^0.64.7",
-    "nodemon": "^3.1.4",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.5.2"
+  "scripts": {
+    "build": "nest build",
+    "start": "node dist/main",
+    "start:dev": "nest start --watch",
+    "start:prod": "node dist/main"
   },
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.12",
+    "@nestjs/common": "^11.1.3",
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/core": "^11.1.3",
+    "@nestjs/typeorm": "^11.0.0",
     "axios": "^1.7.2",
-    "cheerio": "^1.0.0-rc.12",
-    "dotenv": "^16.5.0",
     "ffmpeg-static": "^5.2.0",
-    "fluent-ffmpeg": "^2.1.3",
-    "miniget": "^4.2.3",
-    "mongoose": "^8.11.0",
-    "node-fetch": "^3.3.2",
     "node-telegram-bot-api": "^0.66.0",
-    "play-dl": "^1.9.7",
-    "postmark": "^4.0.5",
+    "pg": "^8.16.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
     "sharp": "^0.33.4",
-    "telegram": "^2.22.2",
-    "ytdl-core": "^4.11.5"
+    "typeorm": "^0.3.25"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.7",
+    "@types/node": "^22.15.0",
+    "@types/node-telegram-bot-api": "^0.64.7",
+    "typescript": "^5.8.3"
   }
 }
