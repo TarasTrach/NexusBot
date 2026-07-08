@@ -9,27 +9,16 @@ import {
   calculatePaypalAmountForCrypto,
   calculatePaypalAmountForNbuLimit,
 } from "../services/crypto.service";
-import {
-  requestBirthdayEntry,
-  requestBirthdayRemoval,
-  startBirthdayReminderScheduler,
-} from "../services/birthdayReminder.service";
-import { randomizePassword } from "../utils/randomizers";
 
 const adminChatID = 891948666;
 
 export function startBot(bot: TelegramAPI) {
-  startBirthdayReminderScheduler(bot, adminChatID);
-
   bot.setMyCommands([
     { command: "/convertmp3", description: "Convert YouTube video to MP3" },
-    { command: "/randomizepass", description: "Randomize password" },
     { command: "/paypalrate", description: "PayPal update rate" },
     { command: "/settings", description: "Update settings" },
     { command: "/exchange", description: "PayPal exchange" },
     { command: "/bybit", description: "Bybit" },
-    { command: "/addbirthday", description: "Додати нагадування про ДН" },
-    { command: "/removebirthday", description: "Видалити нагадування про ДН" },
   ]);
 
   bot.on("message", async (msg: TelegramAPI.Message) => {
@@ -48,35 +37,6 @@ export function startBot(bot: TelegramAPI) {
           if (chatID !== adminChatID) break;
           calculatePaypalAmountForNbuLimit(bot, chatID);
           break;
-
-        case "/randomizepass": {
-          if (chatID !== adminChatID) break;
-          bot.sendMessage(chatID, "Будь ласка, надішліть ваше ім'я та прізвище через пробіл");
-          bot.once("message", async (msg: TelegramAPI.Message) => {
-            try {
-              const args = msg.text?.split(" ") || [];
-              if (args.length < 2) {
-                bot.sendMessage(chatID, "Будь ласка, використовуйте формат: FirstName LastName");
-                return;
-              }
-              const firstName = args[0].toLowerCase();
-              const lastName = args[1].toLowerCase();
-
-              const password = randomizePassword();
-              const emailPassword = password.slice(0, 4) + "E" + password.slice(4);
-
-              const fourRandom = password.slice(7, 11);
-
-              const primaryEmail = `${firstName}.${lastName}${fourRandom}@ukr.net`;
-
-              const message = `#UpworkEmails\n${primaryEmail}\n${emailPassword}\n${password}`;
-              bot.sendMessage(chatID, message);
-            } catch (error: any) {
-              bot.sendMessage(chatID, error.message);
-            }
-          });
-          break;
-        }
 
         case "/exchange": {
           if (chatID !== adminChatID) break;
@@ -99,18 +59,6 @@ export function startBot(bot: TelegramAPI) {
         case "/bybit": {
           if (chatID !== adminChatID) break;
           await calculatePaypalAmountForCrypto(bot, chatID);
-          break;
-        }
-
-        case "/addbirthday": {
-          if (chatID !== adminChatID) break;
-          requestBirthdayEntry(bot, chatID);
-          break;
-        }
-
-        case "/removebirthday": {
-          if (chatID !== adminChatID) break;
-          requestBirthdayRemoval(bot, chatID);
           break;
         }
 
